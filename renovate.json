@@ -1,0 +1,41 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":dependencyDashboard"
+  ],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "schedule": ["before 6am on monday"],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"],
+    "prPriority": 10
+  },
+  "packageRules": [
+    {
+      "description": "Group non-major Python updates per app",
+      "matchManagers": ["pip_requirements"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "python non-major"
+    },
+    {
+      "description": "Pin and update GitHub Actions digests",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true,
+      "groupName": "github actions"
+    },
+    {
+      "description": "Terraform providers weekly, grouped",
+      "matchManagers": ["terraform"],
+      "groupName": "terraform providers"
+    },
+    {
+      "description": "Base images (Dockerfiles) — separate PRs, never auto-merged",
+      "matchManagers": ["dockerfile"],
+      "automerge": false
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+name: Bug report
+description: Something is broken (NOT a security vulnerability — see SECURITY.md)
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security vulnerabilities must not be filed here.** Use a private
+        security advisory as described in [SECURITY.md](../../SECURITY.md).
+  - type: input
+    id: component
+    attributes:
+      label: Component
+      placeholder: USER app / ADMIN app / pipeline (EKS|GKE|AKS) / terraform / k8s / ai
+    validations: { required: true }
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. ...
+        2. ...
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      render: shell

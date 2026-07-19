@@ -1,0 +1,22 @@
+---
+# Scrape the /metrics endpoint the apps now expose (telemetry.py,
+# prometheus-fastapi-instrumentator). Picked up by the Prometheus operator
+# installed via kubernetes/operators/prometheus/.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fastapi-apps
+  namespace: fastapi-namespace
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: fastapi-user-app
+  endpoints:
+    - port: https
+      scheme: https
+      path: /metrics
+      interval: 30s
+      tlsConfig:
+        insecureSkipVerify: true   # self-signed in-pod cert

@@ -14,6 +14,8 @@ A multi-cloud, containerized web application and REST API for managing AWS RDS d
 
 > **Agentic AI Orchestration** — USER_FASTAPI includes a [LangGraph](https://langchain-ai.github.io/langgraph/)-powered ReAct agent (`lib/agent_orchestrator.py`) that plans and executes the restore → status-check → optional-attach → notify workflow as a single operation, via `GET/POST /agent/restore-workflow`. See [Agentic Restore Workflow](#agentic-restore-workflow--langgraph-orchestration) below.
 
+> **Gap Closure & AI-Native DevSecOps** — Every gap category from the external expert analysis (enforcement, supply chain, secrets & identity, runtime policy, delivery discipline, observability & SRE, governance, modernization) has been addressed. Highlights: RS256 JWT with refresh rotation + server-side revocation, SLSA provenance + Kyverno admission verification of signed/attested images, DAST on pull requests, committed SLOs/alerts/dashboards with OpenTelemetry, full governance paperwork (SECURITY.md, ADRs, CODEOWNERS, IR/DR/retention policies), and an AI layer — SARIF triage agent, AI code review, AI runbook generator, and an MCP server ([`ai/`](ai/), [`.mcp.json`](.mcp.json)). The finding-by-finding map is in [docs/gap-closure.md](docs/gap-closure.md).
+
 ---
 
 ## Table of Contents

@@ -1,0 +1,117 @@
+---
+# Alert rules derived from the SLOs in docs/slo.md.
+# Multi-window multi-burn-rate alerting on availability, plus latency,
+# saturation and outage alerts. Metric names come from
+# prometheus-fastapi-instrumentator (http_request_duration_seconds,
+# http_requests_total with handler/status labels).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: fastapi-slo-alerts
+  namespace: fastapi-namespace
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: fastapi.availability
+      rules:
+        - record: fastapi:request_error_ratio_5m
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+              /
+            sum(rate(http_requests_total[5m]))
+        - record: fastapi:request_error_ratio_1h
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[1h]))
+              /
+            sum(rate(http_requests_total[1h]))
+
+        # 99.5% availability SLO → 0.5% error budget.
+        # Fast burn: 14.4x budget burn over 5m AND 1h → page.
+        - alert: FastApiErrorBudgetFastBurn
+          expr: |
+            fastapi:request_error_ratio_5m > (14.4 * 0.005)
+              and
+            fastapi:request_error_ratio_1h > (14.4 * 0.005)
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "Error budget fast burn — 5xx ratio breaching 99.5% SLO"
+            runbook_url: "docs/governance/incident-response.md"
+
+        # Slow burn: 3x budget burn over 1h → ticket.
+        - alert: FastApiErrorBudgetSlowBurn
+          expr: fastapi:request_error_ratio_1h > (3 * 0.005)
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: "Error budget slow burn — sustained elevated 5xx ratio"
+
+    - name: fastapi.latency
+      rules:
+        # Latency SLO: 95% of requests under 500ms.
+        - alert: FastApiLatencyP95High
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 0.5
+          for: 10m
+          labels: { severity: warning }
+          annotations:
+            summary: "p95 latency above 500ms for 10m (latency SLO breach)"
+
+    - name: fastapi.availability-outage
+      rules:
+        - alert: FastApiDown
+          expr: |
+            sum(kube_deployment_status_replicas_available{deployment=~"fastapi-.*-app"}) == 0
+          for: 2m
+          labels: { severity: critical }
+          annotations:
+            summary: "No available replicas for a FastAPI deployment"
+
+        - alert: FastApiPodRestartLoop
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace=~"fastapi.*"}[30m]) > 3
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Pod restarting repeatedly (possible crash loop)"
+
+    - name: fastapi.security
+      rules:
+        # Rate-limit spikes usually mean brute force against /login or /auth/token.
+        - alert: FastApiAuthRateLimitSpike
+          expr: |
+            sum(rate(http_requests_total{status="429", handler=~"/login|/auth/token"}[5m])) > 1
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: "Sustained 429s on auth endpoints — possible credential stuffing"
+---
+# Route the alerts to Slack. Create the webhook secret first:
+#   kubectl -n fastapi-namespace create secret generic alertmanager-slack \
+#     --from-literal=webhook-url='https://hooks.slack.com/services/...'
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: fastapi-slack
+  namespace: fastapi-namespace
+  labels:
+    release: prometheus
+spec:
+  route:
+    receiver: slack
+    groupBy: [alertname]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+  receivers:
+    - name: slack
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-slack
+            key: webhook-url
+          channel: "#devsecops-alerts"
+          sendResolved: true
+          title: '{{ .CommonAnnotations.summary }}'

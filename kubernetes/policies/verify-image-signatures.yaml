@@ -1,0 +1,59 @@
+---
+# Admission verification — the last link of the supply chain.
+# The cluster admits an app image only when all three attestations produced by
+# the CI pipeline validate against this repository's GitHub Actions OIDC
+# identity (Cosign keyless / Sigstore):
+#   1. Cosign signature
+#   2. SPDX SBOM attestation
+#   3. SLSA provenance attestation
+# Replace CHANGEME-github-org/fastWebApp_AI with the real repository slug and
+# the registry globs with the real ECR/ACR/GAR hosts.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify image signatures, SBOM and provenance
+    policies.kyverno.io/severity: critical
+    policies.kyverno.io/description: >-
+      Only images signed at build time by this repository's CI (keyless
+      Cosign via GitHub Actions OIDC) and carrying SBOM + SLSA provenance
+      attestations are admitted into the app namespaces.
+spec:
+  validationFailureAction: Enforce
+  webhookTimeoutSeconds: 30
+  failurePolicy: Fail
+  rules:
+    - name: require-signature-sbom-provenance
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [fastapi-namespace, fastapi-admin-namespace]
+      verifyImages:
+        - imageReferences:
+            - "*/fastapi-user-app*"
+            - "*/fastapi-admin-app*"
+          attestors:
+            - entries:
+                - keyless:
+                    subject: "https://github.com/CHANGEME-github-org/fastWebApp_AI/.github/workflows/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          attestations:
+            - type: https://spdx.dev/Document
+              attestors:
+                - entries:
+                    - keyless:
+                        subject: "https://github.com/CHANGEME-github-org/fastWebApp_AI/.github/workflows/*"
+                        issuer: "https://token.actions.githubusercontent.com"
+            - type: https://slsa.dev/provenance/v1
+              attestors:
+                - entries:
+                    - keyless:
+                        subject: "https://github.com/CHANGEME-github-org/fastWebApp_AI/.github/workflows/*"
+                        issuer: "https://token.actions.githubusercontent.com"
+          mutateDigest: true      # rewrite tag → digest so what was verified is what runs
+          verifyDigest: true
+          required: true

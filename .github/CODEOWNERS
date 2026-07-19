@@ -1,0 +1,34 @@
+# Review authority per path. Every PR needs an approval from the owners of
+# the paths it touches; security-sensitive paths deliberately overlap.
+
+# Default owner
+*                               @skondla
+
+# Application security surface — auth, middleware, token state
+dockerized/*/security.py        @skondla
+dockerized/*/security_middleware.py  @skondla
+dockerized/*/token_store.py     @skondla
+dockerized/*/routers/auth.py    @skondla
+
+# CI/CD pipelines and gates
+actions/                        @skondla
+.github/                        @skondla
+
+# Infrastructure as code
+aws/                            @skondla
+gcp/                            @skondla
+azure/                          @skondla
+argocd/                         @skondla
+
+# Cluster policy & observability
+kubernetes/policies/            @skondla
+kubernetes/observability/       @skondla
+
+# AI agents & MCP tooling
+ai/                             @skondla
+dockerized/USER_FASTAPI/lib/agent_orchestrator.py  @skondla
+
+# Governance documents
+SECURITY.md                     @skondla
+docs/adr/                       @skondla
+docs/governance/                @skondla

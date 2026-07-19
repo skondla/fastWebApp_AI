@@ -1,0 +1,33 @@
+---
+# Default-deny by construction: every newly created namespace (except system
+# namespaces) automatically receives a deny-all NetworkPolicy. Workload
+# namespaces then open only the flows they need with explicit policies
+# (see aws/eks/deploy/manifest/*/networkpolicy.yaml).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: add-default-deny-networkpolicy
+  annotations:
+    policies.kyverno.io/title: Generate default-deny NetworkPolicy per namespace
+    policies.kyverno.io/severity: high
+spec:
+  rules:
+    - name: default-deny
+      match:
+        any:
+          - resources:
+              kinds: [Namespace]
+      exclude:
+        any:
+          - resources:
+              namespaces: [kube-system, kube-public, kube-node-lease, kyverno]
+      generate:
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        name: default-deny-all
+        namespace: "{{request.object.metadata.name}}"
+        synchronize: true
+        data:
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress, Egress]

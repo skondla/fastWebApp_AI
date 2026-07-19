@@ -1,0 +1,49 @@
+name: "AI Code Review (Claude)"
+
+# AI-assisted review on every pull request. Claude reviews the diff with a
+# security-first checklist and posts findings as PR comments. Advisory by
+# design — it augments, never replaces, the CODEOWNERS human review.
+# Requires the ANTHROPIC_API_KEY repository secret.
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+
+concurrency:
+  group: ai-review-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude-review:
+    name: "🤖 Claude review"
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.pull_request.draft }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Run Claude Code review
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Review this pull request as a senior DevSecOps engineer. Focus, in
+            order, on:
+            1. Security regressions — auth/JWT handling, secret exposure,
+               SSRF/injection, weakened security headers or middleware, and
+               any loosening of Kubernetes securityContext, NetworkPolicy,
+               or Kyverno policies.
+            2. Supply-chain and pipeline changes — anything that makes a
+               CI security gate non-blocking (|| true, soft_fail, exit-code 0),
+               removes signing/SBOM/provenance, or adds unpinned actions.
+            3. Correctness bugs with a concrete failure scenario.
+            Report findings as inline PR comments with severity and a
+            suggested fix. Do not comment on style. If nothing is wrong,
+            say so in a single summary comment.
+          claude_args: "--max-turns 30"

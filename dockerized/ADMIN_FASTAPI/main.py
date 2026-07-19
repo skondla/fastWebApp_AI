@@ -4,6 +4,8 @@
 #          Converted from Flask (dockerized/ADMIN/) to FastAPI with JWT OAuth 2.0.
 # -*- coding: utf-8 -*-
 
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -13,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 
 import models
+import telemetry
 from database import engine
 from routers import auth, main_router
 from security_middleware import (
@@ -42,13 +45,25 @@ app = FastAPI(
 app.add_middleware(SecurityAuditMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
+# CORS — explicit allowlist via CORS_ALLOW_ORIGINS (comma-separated).
+# Credentials only with named origins; wildcard + credentials is a CSRF hazard.
+_origins = [o.strip() for o in os.environ.get("CORS_ALLOW_ORIGINS", "*").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials="*" not in _origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Observability — Prometheus /metrics, OTel tracing, JSON logs (env-gated)
+telemetry.configure_telemetry(app, engine)
+
+
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    """Liveness/synthetic-monitoring probe — no auth, no DB dependency."""
+    return {"status": "ok"}
 
 try:
     app.mount("/static", StaticFiles(directory="static"), name="static")

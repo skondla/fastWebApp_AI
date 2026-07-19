@@ -1,0 +1,73 @@
+---
+# Version-controlled Grafana dashboard, reconciled by the grafana-operator
+# installed via kubernetes/operators/grafana/. Panels track the four golden
+# signals plus the two SLOs defined in docs/slo.md.
+apiVersion: grafana.integreatly.org/v1beta1
+kind: GrafanaDashboard
+metadata:
+  name: fastapi-golden-signals
+  namespace: fastapi-namespace
+spec:
+  instanceSelector:
+    matchLabels:
+      dashboards: grafana
+  json: |
+    {
+      "title": "FastAPI — Golden Signals & SLOs",
+      "uid": "fastapi-golden-signals",
+      "timezone": "browser",
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "type": "timeseries", "title": "Request rate (req/s)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "targets": [{
+            "expr": "sum(rate(http_requests_total[5m]))",
+            "legendFormat": "req/s"
+          }]
+        },
+        {
+          "id": 2, "type": "timeseries", "title": "Error ratio (5xx) vs 99.5% SLO",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "targets": [
+            { "expr": "fastapi:request_error_ratio_5m", "legendFormat": "5m error ratio" },
+            { "expr": "0.005", "legendFormat": "SLO budget (0.5%)" }
+          ]
+        },
+        {
+          "id": 3, "type": "timeseries", "title": "Latency p50 / p95 / p99 vs 500ms SLO",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "targets": [
+            { "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50" },
+            { "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95" },
+            { "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99" },
+            { "expr": "0.5", "legendFormat": "SLO (500ms)" }
+          ]
+        },
+        {
+          "id": 4, "type": "timeseries", "title": "Saturation — pod CPU / memory",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "targets": [
+            { "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"fastapi.*\", container!=\"\"}[5m])) by (pod)", "legendFormat": "cpu {{pod}}" },
+            { "expr": "sum(container_memory_working_set_bytes{namespace=~\"fastapi.*\", container!=\"\"}) by (pod) / 1024 / 1024", "legendFormat": "mem MiB {{pod}}" }
+          ]
+        },
+        {
+          "id": 5, "type": "timeseries", "title": "Auth abuse — 429s on /login and /auth/token",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+          "targets": [{
+            "expr": "sum(rate(http_requests_total{status=\"429\", handler=~\"/login|/auth/token\"}[5m]))",
+            "legendFormat": "429/s (auth)"
+          }]
+        },
+        {
+          "id": 6, "type": "stat", "title": "Available replicas",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+          "targets": [{
+            "expr": "sum(kube_deployment_status_replicas_available{deployment=~\"fastapi-.*-app\"}) by (deployment)",
+            "legendFormat": "{{deployment}}"
+          }]
+        }
+      ]
+    }

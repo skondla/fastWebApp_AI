@@ -1,0 +1,4 @@
+# AI/agentic tooling — triage agent, runbook generator, MCP server
+anthropic>=0.60.0
+requests>=2.31.0
+mcp>=1.2.0

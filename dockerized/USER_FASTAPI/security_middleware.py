@@ -8,14 +8,15 @@ import asyncio
 import logging
 import re
 import time
-from collections import defaultdict
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import urlparse
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+
+import token_store
 
 logger = logging.getLogger("security")
 
@@ -88,7 +89,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Sliding-window in-memory rate limiter.
+    Fixed-window rate limiter backed by the shared token store.
+
+    With REDIS_URL set the counters live in Redis, so the limit is GLOBAL
+    across every replica (200/min means 200/min, not 200 × pod count).
+    Without Redis it degrades to a per-pod in-process counter.
 
     - General endpoints: 200 requests / minute per IP
     - Auth endpoints (/login, /auth/token, /signup): 10 requests / minute per IP
@@ -104,8 +109,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app: ASGIApp):
         super().__init__(app)
-        self._buckets: dict[str, list[float]] = defaultdict(list)
-        self._lock = asyncio.Lock()
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         ip = self._client_ip(request)
@@ -113,18 +116,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         limit = self.AUTH_LIMIT if path in self.AUTH_PATHS else self.GENERAL_LIMIT
         key = f"{ip}:{path if path in self.AUTH_PATHS else 'general'}"
 
-        async with self._lock:
-            now = time.monotonic()
-            cutoff = now - self.WINDOW
-            self._buckets[key] = [t for t in self._buckets[key] if t > cutoff]
-            if len(self._buckets[key]) >= limit:
-                logger.warning("Rate limit exceeded: ip=%s path=%s", ip, path)
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": "Too many requests. Please slow down."},
-                    headers={"Retry-After": str(self.WINDOW)},
-                )
-            self._buckets[key].append(now)
+        # The store call may do sync Redis I/O — run it off the event loop.
+        over_limit = await asyncio.to_thread(
+            token_store.rate_limit_hit, key, limit, self.WINDOW
+        )
+        if over_limit:
+            logger.warning("Rate limit exceeded: ip=%s path=%s", ip, path)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please slow down."},
+                headers={"Retry-After": str(self.WINDOW)},
+            )
 
         return await call_next(request)
 

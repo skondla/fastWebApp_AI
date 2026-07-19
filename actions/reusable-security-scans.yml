@@ -1,0 +1,152 @@
+name: "Reusable — DevSecOps security scans"
+
+# ─── Purpose ──────────────────────────────────────────────────────────────────
+# One implementation of the scan stages that were previously copy-pasted into
+# every (app × cloud) workflow: secret scan, SAST, SCA, and IaC scan — all
+# BLOCKING. Cloud-specific workflows keep only their build/sign/deploy/DAST
+# jobs and call this for everything else:
+#
+#   jobs:
+#     security-scans:
+#       uses: ./.github/workflows/reusable-security-scans.yml
+#       with:
+#         app_dir: dockerized/USER_FASTAPI
+#         iac_dir: aws/eks/deploy/terraform-fastapi
+#         k8s_dir: aws/eks/deploy/manifest/fastapi1
+#     build:
+#       needs: security-scans
+#       ...
+#
+# A change to scanning policy is now made once, not six times.
+
+on:
+  workflow_call:
+    inputs:
+      app_dir:
+        description: "Application source directory (Python)"
+        required: true
+        type: string
+      iac_dir:
+        description: "Terraform directory to scan with Checkov"
+        required: false
+        type: string
+        default: ""
+      k8s_dir:
+        description: "Kubernetes manifest directory to scan with Checkov"
+        required: false
+        type: string
+        default: ""
+      python_version:
+        required: false
+        type: string
+        default: "3.11"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secret-scan:
+    name: "🔍 Secret Scan (TruffleHog + GitLeaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: TruffleHog — verified findings block the build
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          extra_args: --only-verified
+
+      - name: GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: "🔬 SAST (Bandit + Semgrep)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - run: pip install bandit semgrep
+
+      - name: Bandit — blocking on high severity
+        run: |
+          bandit -r "${{ inputs.app_dir }}/" \
+            --configfile "${{ inputs.app_dir }}/.bandit" \
+            --format sarif --output bandit-results.sarif \
+            --severity-level high
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: bandit-results.sarif, category: bandit }
+
+      - name: Semgrep — OWASP Top 10, blocking (--error)
+        run: |
+          semgrep \
+            --config p/owasp-top-ten --config p/python \
+            --config p/jwt --config p/secrets \
+            --config "${{ inputs.app_dir }}/.semgrep.yml" \
+            "${{ inputs.app_dir }}/" \
+            --error --sarif --output semgrep-results.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: semgrep-results.sarif, category: semgrep }
+
+  sca:
+    name: "📦 SCA (pip-audit + Trivy FS)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      - run: pip install pip-audit
+
+      - name: pip-audit — blocking
+        run: |
+          pip-audit -r "${{ inputs.app_dir }}/requirements.txt" \
+            --format sarif --output pip-audit-results.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: pip-audit-results.sarif, category: pip-audit }
+
+      - name: Trivy FS — blocking on HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: ${{ inputs.app_dir }}/
+          format: sarif
+          output: trivy-fs-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with: { sarif_file: trivy-fs-results.sarif, category: trivy-fs }
+
+  iac-scan:
+    name: "🏗️ IaC Scan (Checkov)"
+    runs-on: ubuntu-latest
+    if: inputs.iac_dir != '' || inputs.k8s_dir != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov — Terraform, blocking
+        if: inputs.iac_dir != ''
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ${{ inputs.iac_dir }}
+          framework: terraform
+          soft_fail: false
+
+      - name: Checkov — Kubernetes manifests, blocking
+        if: inputs.k8s_dir != ''
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: ${{ inputs.k8s_dir }}
+          framework: kubernetes
+          soft_fail: false

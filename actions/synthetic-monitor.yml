@@ -1,0 +1,50 @@
+name: "Synthetic Monitor (black-box probe)"
+
+# Outside-the-cluster health probe: hits the public /healthz of each deployed
+# app every 10 minutes and alerts Slack on failure. Complements the in-cluster
+# probes (which cannot see LB/DNS/cert failures).
+#
+# Configure the repository variable APP_HEALTH_URLS with a space-separated
+# list, e.g. "https://user.example.com:50443/healthz https://admin.example.com:30443/healthz"
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: "🩺 Probe endpoints"
+    runs-on: ubuntu-latest
+    if: vars.APP_HEALTH_URLS != ''
+    steps:
+      - name: Probe each endpoint
+        id: probe
+        run: |
+          failed=""
+          for url in ${{ vars.APP_HEALTH_URLS }}; do
+            code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 15 "$url" || echo "000")
+            echo "$url -> HTTP $code"
+            if [ "$code" != "200" ]; then
+              failed="$failed $url($code)"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "failed=${failed}" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Alert Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": ":rotating_light: *Synthetic monitor FAILED* — ${{ steps.probe.outputs.failed }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

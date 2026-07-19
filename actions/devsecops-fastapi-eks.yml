@@ -33,6 +33,14 @@ env:
   PYTHON_VERSION:  "3.11"
   AWS_SECRETS_MANAGER_SECRET_ARN: ${{ secrets.AWS_SECRETS_MANAGER_SECRET_ARN }}
 
+# ─── Concurrency guard ────────────────────────────────────────────────────────
+# One run per workflow+ref. A new push supersedes an in-flight PR run; pushes
+# to main queue behind the running deploy instead of racing it (fixes the
+# two-deploys-race / last-write-silently-wins failure mode).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
   security-events: write   # upload SARIF to GitHub Security tab
@@ -293,6 +301,45 @@ jobs:
       - name: Attest SBOM to the image
         run: cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${{ needs.build.outputs.image }}"
 
+      - name: Generate SLSA provenance predicate
+        run: |
+          cat > provenance.json <<PRED
+          {
+            "buildDefinition": {
+              "buildType": "https://actions.github.io/buildtypes/workflow/v1",
+              "externalParameters": {
+                "workflow": {
+                  "ref": "${GITHUB_REF}",
+                  "repository": "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}",
+                  "path": "${GITHUB_WORKFLOW_REF}"
+                }
+              },
+              "internalParameters": {
+                "github": {
+                  "event_name": "${GITHUB_EVENT_NAME}",
+                  "run_id": "${GITHUB_RUN_ID}",
+                  "run_attempt": "${GITHUB_RUN_ATTEMPT}"
+                }
+              },
+              "resolvedDependencies": [
+                {
+                  "uri": "git+${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${GITHUB_REF}",
+                  "digest": { "gitCommit": "${GITHUB_SHA}" }
+                }
+              ]
+            },
+            "runDetails": {
+              "builder": { "id": "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/.github/workflows" },
+              "metadata": {
+                "invocationId": "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}"
+              }
+            }
+          }
+          PRED
+
+      - name: Attest SLSA provenance to the image
+        run: cosign attest --yes --predicate provenance.json --type slsaprovenance1 "${{ needs.build.outputs.image }}"
+
       - uses: actions/upload-artifact@v4
         with: { name: sbom-eks-user, path: sbom.spdx.json }
 
@@ -373,6 +420,73 @@ jobs:
           name: zap-report
           path: report_html.html
           retention-days: 30
+
+# ════════════════════════════════════════════════════════════════════════════
+# 9b. DAST ON PULL REQUESTS — ZAP against a locally-run candidate container
+#     Closes the "DAST runs main/master only" gap: regressions are caught
+#     before merge, without needing cloud credentials on PRs.
+# ════════════════════════════════════════════════════════════════════════════
+  dast-pr:
+    name: "⚡ DAST on PR (ZAP vs local container)"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [secret-scan, sast, sca]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: skondla
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: flaskapp
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U skondla"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build candidate image locally (no push)
+        run: docker build -t fastapi-user-app:pr dockerized/USER_FASTAPI
+
+      - name: Run the candidate container
+        run: |
+          # Bridge network; Postgres service port is published on the host,
+          # reachable from the container via the docker bridge gateway.
+          docker run -d --name app -p 50443:50443 \
+            -e shost=172.17.0.1 -e sport=5432 \
+            -e suser=skondla -e spassword=password -e sdatabase=flaskapp \
+            fastapi-user-app:pr
+          for i in $(seq 1 30); do
+            curl -skf https://localhost:50443/healthz && exit 0
+            sleep 2
+          done
+          echo "App failed to become healthy"; docker logs app; exit 1
+
+      - name: OWASP ZAP baseline scan (PR gate)
+        run: |
+          set +e
+          docker run --rm --network host \
+            -v "$(pwd):/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t https://localhost:50443 \
+            -c dockerized/USER_FASTAPI/.zap/rules.tsv \
+            -a -w zap-pr-report.md
+          rc=$?
+          set -e
+          # zap-baseline: 0=pass, 1=FAIL alerts, 2=WARN alerts. Gate on FAILs.
+          if [ "$rc" -eq 1 ]; then
+            echo "ZAP reported FAIL-level alerts — blocking the PR"; exit 1
+          fi
+
+      - name: Publish ZAP report to job summary
+        if: always()
+        run: cat zap-pr-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      - name: App logs on failure
+        if: failure()
+        run: docker logs app || true
 
 # ════════════════════════════════════════════════════════════════════════════
 # 10. NOTIFY — Slack

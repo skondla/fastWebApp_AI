@@ -1,0 +1,35 @@
+---
+# Mutable tags make "what is running?" unanswerable and defeat signature
+# verification. Require a tag, and forbid `:latest`, in app namespaces.
+# (verify-image-signatures.yaml additionally rewrites tags to digests at
+# admission via mutateDigest.)
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/title: Disallow :latest / untagged images
+    policies.kyverno.io/severity: medium
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-immutable-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [fastapi-namespace, fastapi-admin-namespace]
+      validate:
+        message: "Images must use an immutable tag or digest — ':latest' is not allowed."
+        foreach:
+          - list: "request.object.spec.containers"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ element.image }}"
+                    operator: Equals
+                    value: "*:latest"
+                  - key: "{{ contains(element.image, ':') || contains(element.image, '@') }}"
+                    operator: Equals
+                    value: false

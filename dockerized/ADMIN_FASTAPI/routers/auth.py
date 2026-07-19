@@ -4,11 +4,12 @@
 #          Converted from dockerized/ADMIN/auth.py (Flask) to FastAPI.
 # -*- coding: utf-8 -*-
 
+import os
 from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -110,8 +111,15 @@ async def signup_post(
 
 
 @router.get("/logout")
-async def logout():
-    """Clear auth cookies and redirect to login page."""
+async def logout(request: Request):
+    """Revoke tokens server-side, clear auth cookies, redirect to login."""
+    for cookie_name in ("access_token", "refresh_token"):
+        raw = request.cookies.get(cookie_name, "")
+        raw = raw[7:] if raw.startswith("Bearer ") else raw
+        if raw:
+            payload = security.decode_token(raw)
+            if payload:
+                security.revoke_token(payload)
     response = RedirectResponse(url="/login", status_code=302)
     response.delete_cookie("access_token")
     response.delete_cookie("refresh_token")
@@ -165,7 +173,12 @@ async def login_for_access_token(
     tags=["OAuth2"],
 )
 async def refresh_access_token(request: Request, db: Session = Depends(get_db)):
-    """Exchange a valid refresh token (cookie) for a new access token."""
+    """Exchange a valid refresh token (cookie) for a new access token.
+
+    Rotation-on-use: every exchange issues a NEW refresh token and invalidates
+    the presented one. Replaying an already-rotated refresh token revokes the
+    whole token family and forces re-login (theft detection).
+    """
     refresh_tok = request.cookies.get("refresh_token")
     if not refresh_tok:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No refresh token")
@@ -175,8 +188,24 @@ async def refresh_access_token(request: Request, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == payload.get("sub")).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    new_refresh = security.rotate_refresh_token(payload)
+    if new_refresh is None:
+        response = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Refresh token reuse detected — session revoked. Log in again."},
+        )
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        return response
+
     new_access = security.create_access_token(data={"sub": user.email})
-    return schemas.Token(access_token=new_access, token_type="bearer")
+    token_body = schemas.Token(
+        access_token=new_access, refresh_token=new_refresh, token_type="bearer"
+    )
+    response = JSONResponse(content=token_body.model_dump(exclude_none=True))
+    _set_auth_cookies(response, new_access, new_refresh, _ACCESS_MIN * 60)
+    return response
 
 
 @router.get(
@@ -215,6 +244,8 @@ async def api_register(user_data: schemas.UserCreate, db: Session = Depends(get_
 # ── Private helpers ────────────────────────────────────────────────────────────
 
 def _set_auth_cookies(response, access_token: str, refresh_token: str, access_max_age: int):
-    cookie_kwargs = dict(httponly=True, samesite="lax", secure=False)
+    # Secure by default (the app serves HTTPS); set COOKIE_SECURE=0 for local HTTP dev.
+    secure = os.environ.get("COOKIE_SECURE", "1") != "0"
+    cookie_kwargs = dict(httponly=True, samesite="lax", secure=secure)
     response.set_cookie("access_token", f"Bearer {access_token}", max_age=access_max_age, **cookie_kwargs)
     response.set_cookie("refresh_token", refresh_token, max_age=604_800, **cookie_kwargs)
