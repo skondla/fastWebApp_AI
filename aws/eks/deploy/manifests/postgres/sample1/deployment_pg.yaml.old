@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres11
+  namespace: flaskapp1-namespace
+  labels:
+    app: flaskapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flaskapi
+  template:
+    metadata:
+      labels:
+        app: flaskapi
+    spec:
+      containers:
+        - image: postgres:11
+          name: postgres
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_DB
+              value: postgres
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name:  pg11-secrets
+                  key: pg_root
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: postgres-stateful-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-stateful-data
+          persistentVolumeClaim:
+            claimName: pg-pvc-claim

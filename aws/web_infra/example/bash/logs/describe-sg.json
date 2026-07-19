@@ -1,0 +1,671 @@
+{
+    "SecurityGroups": [
+        {
+            "Description": "allow http and https traffic",
+            "GroupName": "from-alb-only",
+            "IpPermissions": [
+                {
+                    "FromPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "172.31.0.0/16"
+                        },
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 80,
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-05a9d9d0c427b25db",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "allow traffic from myIP",
+            "GroupName": "MyIP-sg",
+            "IpPermissions": [
+                {
+                    "FromPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "162.198.11.200/32",
+                            "Description": "traffic from my home network"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 80,
+                    "UserIdGroupPairs": []
+                },
+                {
+                    "FromPort": 22,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "162.198.11.200/32",
+                            "Description": "traffic from my home network"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 22,
+                    "UserIdGroupPairs": []
+                },
+                {
+                    "FromPort": 443,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "162.198.11.200/32",
+                            "Description": "traffic from my home network"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 443,
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-0fb3ced39572d04b6",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "Database Security Group",
+            "GroupName": "dbSecurityGroup",
+            "IpPermissions": [
+                {
+                    "FromPort": 5432,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "162.198.11.200/32",
+                            "Description": "Postgres connection"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 5432,
+                    "UserIdGroupPairs": []
+                },
+                {
+                    "FromPort": 3306,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "162.198.11.200/32",
+                            "Description": "MySQL connection"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 3306,
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-0d4eb9c249ef30a4e",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "default VPC security group",
+            "GroupName": "default",
+            "IpPermissions": [
+                {
+                    "FromPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 80,
+                    "UserIdGroupPairs": []
+                },
+                {
+                    "FromPort": 0,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "162.198.11.200/32",
+                            "Description": "My local IP"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 65535,
+                    "UserIdGroupPairs": [
+                        {
+                            "Description": "DB Security Group",
+                            "GroupId": "sg-0d4eb9c249ef30a4e",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 5432,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "104.28.132.121/32"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 5432,
+                    "UserIdGroupPairs": []
+                },
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-06e7a41d836dfba08",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-06e7a41d836dfba08",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "launch-wizard-1 created 2025-03-15T19:09:19.552Z",
+            "GroupName": "launch-wizard-1",
+            "IpPermissions": [
+                {
+                    "FromPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 80,
+                    "UserIdGroupPairs": [
+                        {
+                            "Description": "traffic from ALB",
+                            "GroupId": "sg-03c5c42889c1e31da",
+                            "UserId": "339712704592"
+                        },
+                        {
+                            "GroupId": "sg-0afc3f51105ed1f41",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 443,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 443,
+                    "UserIdGroupPairs": [
+                        {
+                            "Description": "traffic from ALB",
+                            "GroupId": "sg-03c5c42889c1e31da",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-0fe3540bbc71e8754",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "[DO NOT DELETE] Security Group that allows inbound NFS traffic for SageMaker Notebooks Domain [d-7ve8ruuhyzkf]",
+            "GroupName": "security-group-for-inbound-nfs-d-7ve8ruuhyzkf",
+            "IpPermissions": [
+                {
+                    "FromPort": 988,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 988,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-0b6ca617064e48891",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 1018,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 1023,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-0b6ca617064e48891",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 2049,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 2049,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-0b6ca617064e48891",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-074ffd870fd2cc9bb",
+            "IpPermissionsEgress": [],
+            "Tags": [
+                {
+                    "Key": "ManagedByAmazonSageMakerResource",
+                    "Value": "arn:aws:sagemaker:us-east-1:339712704592:domain/d-7ve8ruuhyzkf"
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "[DO NOT DELETE] Security Group that allows outbound NFS traffic for SageMaker Notebooks Domain [d-6oq4e473vs2v]",
+            "GroupName": "security-group-for-outbound-nfs-d-6oq4e473vs2v",
+            "IpPermissions": [],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-01fe7833801cace9e",
+            "IpPermissionsEgress": [
+                {
+                    "FromPort": 988,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 988,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-07aead77200ee9aae",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 1018,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 1023,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-07aead77200ee9aae",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 2049,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 2049,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-07aead77200ee9aae",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "Tags": [
+                {
+                    "Key": "ManagedByAmazonSageMakerResource",
+                    "Value": "arn:aws:sagemaker:us-east-1:339712704592:domain/d-6oq4e473vs2v"
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "[DO NOT DELETE] Security Group that allows inbound NFS traffic for SageMaker Notebooks Domain [d-6oq4e473vs2v]",
+            "GroupName": "security-group-for-inbound-nfs-d-6oq4e473vs2v",
+            "IpPermissions": [
+                {
+                    "FromPort": 988,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 988,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-01fe7833801cace9e",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 1018,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 1023,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-01fe7833801cace9e",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 2049,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 2049,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-01fe7833801cace9e",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-07aead77200ee9aae",
+            "IpPermissionsEgress": [],
+            "Tags": [
+                {
+                    "Key": "ManagedByAmazonSageMakerResource",
+                    "Value": "arn:aws:sagemaker:us-east-1:339712704592:domain/d-6oq4e473vs2v"
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "[DO NOT DELETE] Security Group that allows outbound NFS traffic for SageMaker Notebooks Domain [d-7ve8ruuhyzkf]",
+            "GroupName": "security-group-for-outbound-nfs-d-7ve8ruuhyzkf",
+            "IpPermissions": [],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-0b6ca617064e48891",
+            "IpPermissionsEgress": [
+                {
+                    "FromPort": 988,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 988,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-074ffd870fd2cc9bb",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 1018,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 1023,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-074ffd870fd2cc9bb",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 2049,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 2049,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-074ffd870fd2cc9bb",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "Tags": [
+                {
+                    "Key": "ManagedByAmazonSageMakerResource",
+                    "Value": "arn:aws:sagemaker:us-east-1:339712704592:domain/d-7ve8ruuhyzkf"
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "Allow HTTP inbound traffic",
+            "GroupName": "demo-sg-lb",
+            "IpPermissions": [
+                {
+                    "FromPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "traffic from Internet"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 80,
+                    "UserIdGroupPairs": [
+                        {
+                            "Description": "traffic from my IP",
+                            "GroupId": "sg-0fb3ced39572d04b6",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 0,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 0,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-0fb3ced39572d04b6",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 443,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0",
+                            "Description": "traffic from Internet"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 443,
+                    "UserIdGroupPairs": [
+                        {
+                            "Description": "traffic from my IP",
+                            "GroupId": "sg-0fb3ced39572d04b6",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-03c5c42889c1e31da",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        },
+        {
+            "Description": "allow TCP and HTTP traffic",
+            "GroupName": "nlb-sg",
+            "IpPermissions": [
+                {
+                    "FromPort": 80,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 80,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-0fb3ced39572d04b6",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 0,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 65535,
+                    "UserIdGroupPairs": [
+                        {
+                            "GroupId": "sg-0fb3ced39572d04b6",
+                            "UserId": "339712704592"
+                        }
+                    ]
+                },
+                {
+                    "FromPort": 443,
+                    "IpProtocol": "tcp",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "ToPort": 443,
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "OwnerId": "339712704592",
+            "GroupId": "sg-0afc3f51105ed1f41",
+            "IpPermissionsEgress": [
+                {
+                    "IpProtocol": "-1",
+                    "IpRanges": [
+                        {
+                            "CidrIp": "0.0.0.0/0"
+                        }
+                    ],
+                    "Ipv6Ranges": [],
+                    "PrefixListIds": [],
+                    "UserIdGroupPairs": []
+                }
+            ],
+            "VpcId": "vpc-0b572302cc2887aee"
+        }
+    ]
+}

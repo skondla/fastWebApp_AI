@@ -1,0 +1,203 @@
+name: DevSecOps CI/CD Pipeline Deploy-GKE
+
+#on: [workflow_dispatch]
+on:
+  push:
+    branches: [ "testing_on_gcp", "master"]
+
+env:
+  GKE_PROJECT: ${{ secrets.GKE_PROJECT }}
+  GKE_CLUSTER: flaskapp1-demo-cluster
+  GKE_APP_ADMIN_NAME: flaskapp1-admin-ui
+  GKE_APP_USER_NAME: flaskapp1-user-ui
+  GKE_SERVICE: flaskapp1-service
+  GKE_SERVICE_ACCOUNT: flaskapp1-serviceaccount
+  GKE_NAMESPACE: flaskapp1-namespace
+  GKE_DEPLOYMENT_NAME: flaskapp1-deployment
+  GKE_REGION: us-east4
+  GKE_ZONE: us-east4-a
+  GKE_ADDITIONAL_ZONE: us-east4-b
+  GKE_SA_KEY: ${{ secrets.GKE_SA_KEY }}
+  GKE_SA_EMAIL: ${{ secrets.GKE_SA_EMAIL }}
+  APP_VERSION: ${{ github.sha }}
+  MANIFESTS_DIR: gcp/gke/deploy/manifests/flaskapp1
+  #SERVICE_MESH_DIR: gcp/gke/deploy/serviceMesh
+  APP_ADMIN_DIR: dockerized/ADMIN
+  APP_USER_DIR: dockerized/USER
+  GKE_APP_ADMIN_PORT: 30443
+  GITHUB_SHA: ${{ github.sha }}
+jobs:
+  Checkout:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Setup gcloud CLI
+    - uses: google-github-actions/setup-gcloud@v0.6.0
+      with:
+        service_account_key: ${{ secrets.GKE_SA_KEY }}
+        project_id: ${{ secrets.GKE_PROJECT }}
+        export_default_credentials: true 
+  Test:
+    needs: [Checkout]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test Application
+        working-directory:  ${{ env.APP_ADMIN_DIR }}
+        run: |-  
+          echo "Testing Application, Not complete yet"
+
+  # Test:
+  #   needs: [Build]
+  #   runs-on: ubuntu-latest
+  #   strategy:
+  #     matrix: 
+  #       os: [ubuntu-latest, macos-latest, windows-latest]
+  #       python-version: [3.7.4, 3.9.13]
+  #       steps:
+  #       - uses: actions/checkout@v2
+  #       - name: Set up Python ${{ matrix.python-version }}
+  #         uses: actions/setup-python@v2
+  #         with:
+  #           python-version:  ${{ matrix.python-version }}
+  #       - name: Display Python version
+  #         run: python -c "import sys; print(sys.version)"
+  #       - name: Install dependencies
+  #         working-directory:  ${{ env.APP_ADMIN_DIR }}
+  #         run: |
+  #           python -m pip install --upgrade pip
+  #           pip install pytest
+  #           pip install -r requirements.txt        
+  #       - name: Install project
+  #         run: |
+  #           pip install -e .
+  #       - name: Test with pytest
+  #         run: |
+  #           pytest
+                    
+    # Build the Docker image and Scan it
+  Build:
+    needs: [Test] 
+    runs-on: ubuntu-latest
+    steps:
+    - uses: google-github-actions/setup-gcloud@v0.6.0
+      with:
+        service_account_key: ${{ secrets.GKE_SA_KEY }}
+        project_id: ${{ secrets.GKE_PROJECT }}
+        export_default_credentials: true  
+    - uses: google-github-actions/get-gke-credentials@v0.5.0
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+        credentials: ${{ secrets.GKE_SA_KEY }} 
+    - uses: actions/checkout@v3
+    - name: Build, Scan and Push ADMIN UI app Docker image
+      working-directory:  ${{ env.APP_ADMIN_DIR }}
+      run: |-  
+        docker build \
+          --tag "${{env.GKE_REGION}}-docker.pkg.dev/${{env.GKE_PROJECT}}/${{env.GKE_PROJECT}}/${{env.GKE_APP_ADMIN_NAME}}:${{env.APP_VERSION}}" \
+          --build-arg GITHUB_SHA="$GITHUB_SHA" \
+          --build-arg GITHUB_REF="$GITHUB_REF" \
+          .
+        gcloud auth configure-docker ${{env.GKE_REGION}}-docker.pkg.dev --quiet
+        docker push "${{env.GKE_REGION}}-docker.pkg.dev/${{env.GKE_PROJECT}}/${{env.GKE_PROJECT}}/${{env.GKE_APP_ADMIN_NAME}}:${{env.APP_VERSION}}"
+      #  gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin https://${{env.GKE_REGION}}-docker.pkg.dev
+    #Image scan with Aqua Trivy  
+  Scan:
+    needs: [Build]
+    runs-on: ubuntu-latest
+    steps: 
+    - uses: google-github-actions/setup-gcloud@v0.6.0
+      with:
+        service_account_key: ${{ secrets.GKE_SA_KEY }}
+        project_id: ${{ secrets.GKE_PROJECT }}
+        export_default_credentials: true    
+    - uses: google-github-actions/get-gke-credentials@v0.5.0
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+        credentials: ${{ secrets.GKE_SA_KEY }} 
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: '${{env.GKE_REGION}}-docker.pkg.dev/${{env.GKE_PROJECT}}/${{env.GKE_PROJECT}}/${{env.GKE_APP_ADMIN_NAME}}:${{env.APP_VERSION}}'
+        format: 'table'
+        #exit-code: '1' #By pass and continue if vulnerabilities found (Not recommended, testing complete devSecOps pipeline)
+        ignore-unfixed: true
+        vuln-type: 'os,library'
+        severity: 'CRITICAL,HIGH'  
+    # Install helm
+    - name: Install Helm
+      run: |
+        curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash
+    # Install Linkerd
+    #- name: Install Linkerd
+    #  run: |
+    #    curl -sL https://run.linkerd.io/install | sh
+    #    export PATH=$PATH:$HOME/.linkerd2/bin
+    #    linkerd check --pre
+    #    linkerd install | kubectl apply -f -
+    #    linkerd check
+      
+    #Upload Scan results to Github Code Scanning
+    #- name: Upload Trivy scan results to GitHub Security tab
+    #  uses: github/codeql-action/upload-sarif@v2
+    #  with:
+    #    sarif_file: 'trivy-results.sarif'  
+  Deploy:
+    needs: [Scan]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    # Setup gcloud CLI
+    - uses: google-github-actions/setup-gcloud@v0.6.0
+      with:
+        service_account_key: ${{ secrets.GKE_SA_KEY }}
+        project_id: ${{ secrets.GKE_PROJECT }}
+        export_default_credentials: true 
+
+    # Get the GKE credentials so we can deploy to the cluster
+    - uses: google-github-actions/get-gke-credentials@v0.5.0
+      with:
+        cluster_name: ${{ env.GKE_CLUSTER }}
+        location: ${{ env.GKE_ZONE }}
+        credentials: ${{ secrets.GKE_SA_KEY }}
+
+    # Deploy the new Docker image to the GKE cluster
+    - name: Deploy
+      working-directory: ${{env.MANIFESTS_DIR}}
+      run: |-
+        envsubst < flaskapp1.yaml | kubectl apply -f -
+        envsubst < Service_admin_ui.yaml | kubectl apply -f -
+        envsubst < Deployment_admin_ui.yaml | kubectl apply -f -
+        kubectl get pods -o wide
+        kubectl get svc -o wide 
+        sleep 60
+    #   curl https://raw.githubusercontent.com/linkerd/linkerd-examples/master/thanos-demo/linkerd-install-gke.yaml  | kubectl apply -f -
+    #   envsubst <  ../../serviceMesh/linkerd-install-gke.yaml | kubectl apply -f - 
+    #   bash serviceMesh/setup_linkerd.sh
+    #Check application is running, test REST endpoints
+    - name: Verify Coontainer Application
+      run: |-
+        curl -Lk https://`kubectl get svc -n ${{env.GKE_NAMESPACE}} | grep ${{env.GKE_SERVICE}} | awk '{print $4}'`:${{env.GKE_APP_ADMIN_PORT}}/signup 
+        curl -Lk https://`kubectl get svc -n ${{env.GKE_NAMESPACE}} | grep ${{env.GKE_SERVICE}} | awk '{print $4}'`:${{env.GKE_APP_ADMIN_PORT}}/login 
+        curl -Lk https://`kubectl get svc -n ${{env.GKE_NAMESPACE}} | grep ${{env.GKE_SERVICE}} | awk '{print $4}'`:${{env.GKE_APP_ADMIN_PORT}}/logout
+
+    #Notify Slack
+    - name: Notify Slack
+      uses: ravsamhq/notify-slack-action@v2
+      if: always()
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_CI_HOOK }}
+      with:
+        status: ${{ job.status }}
+        notification_title: "{workflow}:{job} has {status_message}"
+        message_format: "{emoji} *{workflow}:{job}* {status_message} in <{repo_url}|{repo}>"
+        footer: "Logs <{run_url}|{job}>"
+        notify_when: "failure,success"      

@@ -1,0 +1,148 @@
+<mxfile host="app.diagrams.net" modified="2026-03-01T00:00:00.000Z" agent="Claude" version="21.7.5" type="device">
+  <diagram id="arch-fastapi-devsecops" name="FastAPI DevSecOps Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LAYER LABELS                                                    -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="lbl-users"   value="EXTERNAL USERS"      style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="50"  width="160" height="30" as="geometry"/></mxCell>
+        <mxCell id="lbl-cicd"    value="CI/CD PIPELINE"      style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="200" width="160" height="30" as="geometry"/></mxCell>
+        <mxCell id="lbl-reg"     value="CONTAINER REGISTRY"  style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="390" width="160" height="30" as="geometry"/></mxCell>
+        <mxCell id="lbl-k8s"     value="KUBERNETES (EKS/AKS/GKE)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="530" width="200" height="30" as="geometry"/></mxCell>
+        <mxCell id="lbl-data"    value="DATA &amp; EXTERNAL SERVICES" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=11;fontColor=#666666;" vertex="1" parent="1"><mxGeometry x="20" y="810" width="200" height="30" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LAYER 1: USERS                                                  -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="user-browser" value="Browser / API Client" style="shape=mxgraph.cisco.computers_and_peripherals.pc;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1"><mxGeometry x="210" y="40" width="70" height="70" as="geometry"/></mxCell>
+        <mxCell id="user-devops" value="DevOps Engineer" style="shape=mxgraph.cisco.computers_and_peripherals.pc;sketch=0;html=1;pointerEvents=1;dashed=0;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1"><mxGeometry x="360" y="40" width="70" height="70" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LAYER 2: CI/CD PIPELINE (GitHub Actions)                       -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- Pipeline background -->
+        <mxCell id="cicd-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;dashed=1;" vertex="1" parent="1"><mxGeometry x="190" y="190" width="1360" height="160" as="geometry"/></mxCell>
+        <mxCell id="cicd-title" value="GitHub Actions DevSecOps Pipeline" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=1;fontSize=12;fontColor=#333333;" vertex="1" parent="1"><mxGeometry x="530" y="195" width="310" height="25" as="geometry"/></mxCell>
+
+        <mxCell id="gh-repo"     value="GitHub Repo&#xa;(push/PR trigger)" style="shape=mxgraph.vcs.github;fillColor=#24292e;strokeColor=#24292e;fontColor=#ffffff;labelBackgroundColor=none;sketch=0;html=1;pointerEvents=1;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;outlineConnect=0;" vertex="1" parent="1"><mxGeometry x="210" y="230" width="60" height="60" as="geometry"/></mxCell>
+        <mxCell id="secret-scan" value="🔍 Secret Scan&#xa;TruffleHog&#xa;GitLeaks"  style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="310" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="sast"        value="🔬 SAST&#xa;Bandit&#xa;Semgrep (OWASP)"       style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="440" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="sca"         value="📦 SCA&#xa;pip-audit&#xa;Trivy FS"             style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="570" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="docker-build"value="🐳 Build&#xa;Docker Image&#xa;+ Push"         style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="700" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="img-scan"    value="🔎 Container Scan&#xa;Trivy Image&#xa;SARIF → GitHub" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="830" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="iac-scan"    value="🏗️ IaC Scan&#xa;Checkov&#xa;Terraform + K8s"  style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="960" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="k8s-deploy"  value="🚀 Deploy&#xa;kubectl apply&#xa;Envsubst YAML"  style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1090" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="dast"        value="⚡ DAST&#xa;OWASP ZAP&#xa;Baseline Scan"       style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1220" y="220" width="110" height="60" as="geometry"/></mxCell>
+        <mxCell id="notify"      value="📣 Notify&#xa;Slack&#xa;webhook"               style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1350" y="220" width="110" height="60" as="geometry"/></mxCell>
+
+        <!-- Pipeline arrows -->
+        <mxCell id="e-gh-ss"  value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="gh-repo"      target="secret-scan"  parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-ss-sast"value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="secret-scan"  target="sast"         parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-sast-sc"value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="sast"         target="sca"          parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-sc-db"  value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="sca"          target="docker-build" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-db-is"  value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="docker-build" target="img-scan"     parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-is-iac" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="img-scan"     target="iac-scan"     parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-iac-dep"value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="iac-scan"     target="k8s-deploy"   parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-dep-da" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="k8s-deploy"   target="dast"         parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-da-not" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="dast"         target="notify"       parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LAYER 3: CONTAINER REGISTRIES                                   -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="ecr"  value="🗄️ AWS ECR" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=none;fillColor=#E7157B;labelBackgroundColor=#ffffff;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;" vertex="1" parent="1"><mxGeometry x="630" y="390" width="60" height="60" as="geometry"/></mxCell>
+        <mxCell id="acr"  value="🗄️ Azure ACR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="790" y="400" width="100" height="40" as="geometry"/></mxCell>
+        <mxCell id="gar"  value="🗄️ GCP GAR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="960" y="400" width="100" height="40" as="geometry"/></mxCell>
+        <mxCell id="ecr-lbl"  value="Amazon ECR&#xa;(image:sha)" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;" vertex="1" parent="1"><mxGeometry x="610" y="455" width="100" height="30" as="geometry"/></mxCell>
+
+        <!-- docker-build → registries -->
+        <mxCell id="e-db-ecr" value="push" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;" edge="1" source="docker-build" target="ecr"  parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-db-acr" value="push" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;" edge="1" source="docker-build" target="acr"  parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-db-gar" value="push" style="edgeStyle=orthogonalEdgeStyle;dashed=1;strokeColor=#6c8ebf;" edge="1" source="docker-build" target="gar"  parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LAYER 4: KUBERNETES CLUSTERS                                    -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+
+        <!-- EKS cluster -->
+        <mxCell id="eks-bg"   value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="190" y="520" width="340" height="260" as="geometry"/></mxCell>
+        <mxCell id="eks-lbl"  value="AWS EKS Cluster" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="260" y="525" width="200" height="25" as="geometry"/></mxCell>
+        <mxCell id="eks-ns"   value="Namespace: fastapi-namespace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1"><mxGeometry x="210" y="555" width="300" height="25" as="geometry"/></mxCell>
+        <mxCell id="eks-pod1" value="🐍 FastAPI Pod 1&#xa;uvicorn :50443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1"><mxGeometry x="210" y="595" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="eks-pod2" value="🐍 FastAPI Pod 2&#xa;uvicorn :50443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1"><mxGeometry x="380" y="595" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="eks-svc"  value="LoadBalancer Service&#xa;Port: 50443 → NLB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1"><mxGeometry x="280" y="665" width="160" height="45" as="geometry"/></mxCell>
+        <mxCell id="eks-hpa"  value="HPA: 2–10 replicas&#xa;CPU 70% / MEM 80%" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1"><mxGeometry x="210" y="730" width="300" height="35" as="geometry"/></mxCell>
+
+        <!-- AKS cluster -->
+        <mxCell id="aks-bg"   value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="570" y="520" width="340" height="260" as="geometry"/></mxCell>
+        <mxCell id="aks-lbl"  value="Azure AKS Cluster" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="640" y="525" width="200" height="25" as="geometry"/></mxCell>
+        <mxCell id="aks-ns"   value="Namespace: fastapi-namespace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1"><mxGeometry x="590" y="555" width="300" height="25" as="geometry"/></mxCell>
+        <mxCell id="aks-pod1" value="🐍 FastAPI Pod 1&#xa;uvicorn :50443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1"><mxGeometry x="590" y="595" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="aks-pod2" value="🐍 FastAPI Pod 2&#xa;uvicorn :50443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1"><mxGeometry x="760" y="595" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="aks-svc"  value="LoadBalancer Service&#xa;Port: 50443 → Azure LB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1"><mxGeometry x="660" y="665" width="160" height="45" as="geometry"/></mxCell>
+        <mxCell id="aks-wid"  value="Workload Identity&#xa;Azure AD + OIDC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1"><mxGeometry x="590" y="730" width="300" height="35" as="geometry"/></mxCell>
+
+        <!-- GKE cluster -->
+        <mxCell id="gke-bg"   value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="950" y="520" width="340" height="260" as="geometry"/></mxCell>
+        <mxCell id="gke-lbl"  value="GCP GKE Cluster" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=1;fontSize=12;" vertex="1" parent="1"><mxGeometry x="1020" y="525" width="200" height="25" as="geometry"/></mxCell>
+        <mxCell id="gke-ns"   value="Namespace: fastapi-namespace" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1"><mxGeometry x="970" y="555" width="300" height="25" as="geometry"/></mxCell>
+        <mxCell id="gke-pod1" value="🐍 FastAPI Pod 1&#xa;uvicorn :50443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1"><mxGeometry x="970" y="595" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="gke-pod2" value="🐍 FastAPI Pod 2&#xa;uvicorn :50443" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1"><mxGeometry x="1140" y="595" width="130" height="50" as="geometry"/></mxCell>
+        <mxCell id="gke-svc"  value="LoadBalancer Service&#xa;Port: 50443 → GCP LB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1"><mxGeometry x="1040" y="665" width="160" height="45" as="geometry"/></mxCell>
+        <mxCell id="gke-wid"  value="Workload Identity&#xa;GKE + GSA OIDC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1"><mxGeometry x="970" y="730" width="300" height="35" as="geometry"/></mxCell>
+
+        <!-- registry → cluster pull arrows -->
+        <mxCell id="e-ecr-eks" value="pull" style="edgeStyle=orthogonalEdgeStyle;dashed=1;" edge="1" source="ecr" target="eks-pod1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-acr-aks" value="pull" style="edgeStyle=orthogonalEdgeStyle;dashed=1;" edge="1" source="acr" target="aks-pod1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-gar-gke" value="pull" style="edgeStyle=orthogonalEdgeStyle;dashed=1;" edge="1" source="gar" target="gke-pod1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LAYER 5: DATA & EXTERNAL SERVICES                              -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="pg"       value="🐘 PostgreSQL&#xa;(K8s StatefulSet&#xa;port 5432)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="320" y="840" width="140" height="65" as="geometry"/></mxCell>
+        <mxCell id="rds"      value="☁️ AWS RDS / Aurora&#xa;(DB restore operations)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="520" y="840" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="secrets"  value="🔐 AWS Secrets Manager&#xa;+ K8s Secrets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="730" y="840" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="ses"      value="📧 AWS SES / mailx&#xa;Email Notifications" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="940" y="840" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="slack"    value="💬 Slack Webhook&#xa;Deploy Alerts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1150" y="840" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="ghsec"    value="🛡️ GitHub Security&#xa;SARIF reports&#xa;(Bandit/Trivy/Semgrep)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d6b656;fontSize=10;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1360" y="840" width="150" height="65" as="geometry"/></mxCell>
+
+        <!-- Pods → data -->
+        <mxCell id="e-eks-pg"    value="SQLAlchemy" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#d6b656;" edge="1" source="eks-pod1" target="pg"      parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eks-rds"   value="boto3 RDS"  style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;" edge="1" source="eks-pod2" target="rds"     parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eks-sec"   value=""           style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;" edge="1" source="eks-pod1" target="secrets"  parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-gke-slack" value=""           style="edgeStyle=orthogonalEdgeStyle;strokeColor=#9673a6;" edge="1" source="gke-pod1" target="slack"    parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-sast-ghsec" value="SARIF"     style="edgeStyle=orthogonalEdgeStyle;strokeColor=#d6b656;dashed=1;" edge="1" source="sast" target="ghsec" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- USER → CLUSTER FLOW                                             -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="e-user-eks" value="HTTPS :50443&#xa;JWT Bearer" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" source="user-browser" target="eks-svc" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-dev-gh"   value="git push" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;strokeWidth=2;" edge="1" source="user-devops" target="gh-repo" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-eks-svc-pod" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="eks-svc" target="eks-pod1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-aks-svc-pod" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="aks-svc" target="aks-pod1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e-gke-svc-pod" value="" style="edgeStyle=orthogonalEdgeStyle;" edge="1" source="gke-svc" target="gke-pod1" parent="1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- LEGEND                                                          -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <mxCell id="legend-bg" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1"><mxGeometry x="1340" y="520" width="220" height="270" as="geometry"/></mxCell>
+        <mxCell id="legend-title" value="Legend" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=1;fontSize=13;" vertex="1" parent="1"><mxGeometry x="1390" y="525" width="120" height="25" as="geometry"/></mxCell>
+        <mxCell id="leg1" value="" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1"><mxGeometry x="1355" y="560" width="30" height="20" as="geometry"/></mxCell>
+        <mxCell id="leg1t" value="Application / Service" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1395" y="558" width="155" height="25" as="geometry"/></mxCell>
+        <mxCell id="leg2" value="" style="rounded=1;fillColor=#ffe6cc;strokeColor=#d6b656;" vertex="1" parent="1"><mxGeometry x="1355" y="595" width="30" height="20" as="geometry"/></mxCell>
+        <mxCell id="leg2t" value="Security Control" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1395" y="593" width="155" height="25" as="geometry"/></mxCell>
+        <mxCell id="leg3" value="" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1"><mxGeometry x="1355" y="630" width="30" height="20" as="geometry"/></mxCell>
+        <mxCell id="leg3t" value="Deploy / OK path" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1395" y="628" width="155" height="25" as="geometry"/></mxCell>
+        <mxCell id="leg4" value="" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1"><mxGeometry x="1355" y="665" width="30" height="20" as="geometry"/></mxCell>
+        <mxCell id="leg4t" value="AWS External Service" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1395" y="663" width="155" height="25" as="geometry"/></mxCell>
+        <mxCell id="leg5" value="" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1"><mxGeometry x="1355" y="700" width="30" height="20" as="geometry"/></mxCell>
+        <mxCell id="leg5t" value="Notification / Identity" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontSize=11;" vertex="1" parent="1"><mxGeometry x="1395" y="698" width="155" height="25" as="geometry"/></mxCell>
+        <mxCell id="leg6t" value="OWASP A01–A10 mitigated&#xa;by security_middleware.py" style="text;html=1;strokeColor=none;fillColor=#ffffc0;strokeColor=#999900;align=center;fontSize=10;fontStyle=2;" vertex="1" parent="1"><mxGeometry x="1350" y="730" width="205" height="50" as="geometry"/></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

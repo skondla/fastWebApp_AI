@@ -1,0 +1,98 @@
+# Semgrep configuration for OWASP Top 10 scanning
+# Run: semgrep --config=.semgrep.yml .
+# Also runs cloud rulesets: p/owasp-top-ten p/python p/fastapi p/jwt p/secrets
+
+rules:
+  # ── A01: Broken Access Control ─────────────────────────────────────────────
+  - id: missing-auth-dependency
+    pattern: |
+      @$ROUTER.$METHOD($PATH, ...)
+      async def $FUNC(request: Request, ...):
+          ...
+    pattern-not: |
+      @$ROUTER.$METHOD($PATH, ...)
+      async def $FUNC(..., $USER = Depends(...), ...):
+          ...
+    message: >
+      Route $FUNC may lack authentication. Ensure protected routes use
+      Depends(get_current_user) or Depends(get_optional_user) with an
+      explicit unauthenticated redirect.
+    languages: [python]
+    severity: WARNING
+    paths:
+      include:
+        - "routers/*.py"
+
+  # ── A02: Cryptographic Failures ────────────────────────────────────────────
+  - id: hardcoded-secret-key
+    patterns:
+      - pattern: SECRET_KEY = "..."
+      - pattern-not: SECRET_KEY = os.environ.get(...)
+    message: >
+      Hardcoded SECRET_KEY detected. Load from environment variable or
+      secrets manager. OWASP A02.
+    languages: [python]
+    severity: ERROR
+
+  - id: weak-hash-md5-sha1
+    patterns:
+      - pattern: hashlib.md5(...)
+      - pattern: hashlib.sha1(...)
+    message: >
+      MD5/SHA1 are cryptographically broken. Use SHA-256 or bcrypt for
+      passwords, and SHA-256+ for integrity. OWASP A02.
+    languages: [python]
+    severity: ERROR
+
+  # ── A03: Injection ──────────────────────────────────────────────────────────
+  - id: raw-sql-string-format
+    patterns:
+      - pattern: db.execute("..." % ...)
+      - pattern: db.execute(f"...{...}...")
+      - pattern: db.execute("..." + ...)
+    message: >
+      Potential SQL injection via string concatenation/formatting.
+      Use parameterised SQLAlchemy queries. OWASP A03.
+    languages: [python]
+    severity: ERROR
+
+  - id: os-system-user-input
+    pattern: os.system($X)
+    message: >
+      os.system() with user-controlled data enables OS command injection.
+      Use subprocess with a list argument and no shell=True. OWASP A03.
+    languages: [python]
+    severity: ERROR
+
+  # ── A07: Identification and Authentication Failures ────────────────────────
+  - id: jwt-none-algorithm
+    patterns:
+      - pattern: jwt.decode(..., algorithms=["none"], ...)
+      - pattern: jwt.decode(..., algorithms=["None"], ...)
+    message: >
+      JWT 'none' algorithm allows unsigned tokens — never permit it.
+      OWASP A07.
+    languages: [python]
+    severity: ERROR
+
+  - id: short-jwt-expiry-missing
+    pattern: |
+      jwt.encode($DATA, ...)
+    pattern-not: |
+      jwt.encode({..., "exp": ..., ...}, ...)
+    message: >
+      JWT token encoded without an 'exp' (expiry) claim. Add expiry to
+      prevent indefinitely valid tokens. OWASP A07.
+    languages: [python]
+    severity: WARNING
+
+  # ── A09: Security Logging ──────────────────────────────────────────────────
+  - id: print-sensitive-data
+    patterns:
+      - pattern: print($X)
+    pattern-where-python: "'password' in str(vars())"
+    message: >
+      Possible sensitive data written to stdout via print(). Use the
+      structured logger and avoid logging credentials. OWASP A09.
+    languages: [python]
+    severity: WARNING

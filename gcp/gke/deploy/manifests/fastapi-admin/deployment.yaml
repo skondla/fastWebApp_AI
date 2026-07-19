@@ -1,0 +1,86 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-admin-app
+  namespace: fastapi-namespace
+  labels:
+    app: fastapi-admin-app
+    version: "latest"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fastapi-admin-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: fastapi-admin-app
+        version: "latest"
+      annotations:
+        iam.gke.io/gcp-service-account: CHANGEME-gke-gsa-email
+    spec:
+      serviceAccountName: fastapi-serviceaccount
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: fastapi-admin-app-secrets
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z $shost $sport; do sleep 3; done"]
+          envFrom:
+            - secretRef: { name: fastapi-admin-db-secret }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      containers:
+        - name: fastapi-admin-app
+          image: us-east4-docker.pkg.dev/CHANGEME-gcp-project/CHANGEME-gcp-project/fastapi-admin-app:latest
+          imagePullPolicy: Always
+          ports:
+            - name: https
+              containerPort: 30443
+          envFrom:
+            - secretRef: { name: fastapi-admin-db-secret }
+            - configMapRef: { name: fastapi-admin-config }
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits:   { cpu: "1000m", memory: "512Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /, port: 30443, scheme: HTTPS }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 30443, scheme: HTTPS }
+            initialDelaySeconds: 30
+            periodSeconds: 30

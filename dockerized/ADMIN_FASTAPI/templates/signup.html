@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script>
+const _CTX = {
+  error: {{ (error or '') | tojson }},
+};
+</script>
+
+<div id="signup-root"></div>
+
+<script type="text/babel">
+const { useState } = React;
+
+function strengthLabel(pw) {
+  if (!pw) return null;
+  if (pw.length < 8)  return { label: 'Too short',  color: 'text-red-400',    bar: 'w-1/4 bg-red-500' };
+  if (pw.length < 12) return { label: 'Fair',        color: 'text-yellow-400', bar: 'w-2/4 bg-yellow-500' };
+  if (pw.length < 16) return { label: 'Good',        color: 'text-blue-400',   bar: 'w-3/4 bg-blue-500' };
+  return               { label: 'Strong',      color: 'text-emerald-400', bar: 'w-full bg-emerald-500' };
+}
+
+function SignupPage() {
+  const [email,    setEmail]    = useState('');
+  const [name,     setName]     = useState('');
+  const [password, setPassword] = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState(_CTX.error);
+
+  const strength = strengthLabel(password);
+
+  function handleSubmit(e) {
+    if (!email || !name || !password) {
+      e.preventDefault();
+      setError('All fields are required.');
+      return;
+    }
+    if (password.length < 8) {
+      e.preventDefault();
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+    setError('');
+    setLoading(true);
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-[78vh]">
+      <div className="w-full max-w-md animate-fade-in">
+
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-3xl mb-4">
+            📋
+          </div>
+          <h1 className="text-3xl font-bold text-white">Create Admin Account</h1>
+          <p className="text-slate-400 mt-2 text-sm">Admin portal access</p>
+        </div>
+
+        <div className="glass border border-slate-700/50 rounded-2xl p-8 shadow-2xl">
+          {error && (
+            <div className="mb-5 p-4 rounded-xl bg-red-900/30 border border-red-700/40 text-red-300 text-sm flex items-start gap-2 animate-fade-in">
+              <span className="mt-0.5">✗</span>
+              <span>{error}{' '}<a href="/login" className="underline hover:text-red-200">Go to login</a>.</span>
+            </div>
+          )}
+
+          <form method="POST" action="/signup" onSubmit={handleSubmit} noValidate>
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Email</label>
+              <input
+                type="email" name="email" autoFocus required
+                value={email} onChange={e => { setEmail(e.target.value); setError(''); }}
+                placeholder="admin@example.com"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/40 border border-slate-600/60 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 transition-all text-sm"
+              />
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Full Name</label>
+              <input
+                type="text" name="name" required
+                value={name} onChange={e => setName(e.target.value)}
+                placeholder="Jane Smith"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/40 border border-slate-600/60 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 transition-all text-sm"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-300 mb-1.5">Password</label>
+              <input
+                type="password" name="password" required minLength="8"
+                value={password} onChange={e => { setPassword(e.target.value); setError(''); }}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 rounded-xl bg-slate-700/40 border border-slate-600/60 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 transition-all text-sm"
+              />
+              {strength && (
+                <div className="mt-2">
+                  <div className="h-1 w-full bg-slate-700 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-300 ${strength.bar}`}/>
+                  </div>
+                  <p className={`text-xs mt-1 ${strength.color}`}>{strength.label}</p>
+                </div>
+              )}
+              <p className="text-xs text-slate-500 mt-1.5">Minimum 8 characters. Hashed with bcrypt.</p>
+            </div>
+
+            <button type="submit" disabled={loading}
+              className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/40"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  Creating account…
+                </>
+              ) : '📋 Create Account'}
+            </button>
+          </form>
+        </div>
+
+        <p className="text-center text-slate-500 mt-5 text-sm">
+          Already have an account?{' '}
+          <a href="/login" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
+            Login
+          </a>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('signup-root')).render(<SignupPage />);
+</script>
+{% endblock %}

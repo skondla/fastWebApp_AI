@@ -1,0 +1,61 @@
+<!-- templates/status.html — DB restore status check form -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="column is-8 is-offset-2">
+    <h3 class="title is-3">&#128270; Restore Status</h3>
+    <p class="subtitle has-text-white-ter">
+        Welcome, <strong>{{ name }}</strong>! &nbsp;&bull;&nbsp; Client IP: {{ client_ip }}
+    </p>
+
+    {% if error %}
+    <div class="notification is-danger is-light">
+        ❌ {{ error }}
+        <a href="/login">Return to login</a>.
+    </div>
+    {% endif %}
+
+    <div class="box">
+        <form method="POST" action="/status">
+            <div class="field">
+                <label class="label">Snapshot / New Database Name</label>
+                <div class="control">
+                    <input class="input is-medium"
+                           type="text"
+                           name="snapshotname"
+                           placeholder="New Database Name"
+                           size="75"
+                           style="color:blue;"
+                           required>
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Original DB Endpoint</label>
+                <div class="control">
+                    <input class="input is-medium"
+                           type="text"
+                           name="endpoint"
+                           placeholder="Original DB Endpoint"
+                           size="75"
+                           style="color:brown;"
+                           required>
+                </div>
+            </div>
+
+            <div class="field is-grouped mt-4">
+                <div class="control">
+                    <button class="button is-warning is-medium" type="submit">
+                        &#128270; Check Status
+                    </button>
+                </div>
+                <div class="control">
+                    <button class="button is-light is-medium" type="reset">
+                        &#10006; Reset
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

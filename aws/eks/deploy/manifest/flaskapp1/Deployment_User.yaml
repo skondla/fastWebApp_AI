@@ -1,0 +1,26 @@
+# This file configures the webapp1 app which serves public web traffic on port 80
+#export FLASK_USER_IMAGE_NAME=`cat ~/Downloads/ecr_image.txt|grep "USER APP" | awk '{print $5}'`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ${EKS_APP_USER_NAME}
+  namespace: ${EKS_NAMESPACE}
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ${EKS_APP_USER_NAME}
+  template:
+    metadata:
+      labels:
+        app: ${EKS_APP_USER_NAME}
+    spec:
+      serviceAccountName: ${EKS_SERVICE_ACCOUNT}
+      containers:
+      - name: ${EKS_APP_USER_NAME}
+        image: ${FLASK_USER_IMAGE_NAME}
+        ports:
+        - containerPort: 50443
+        env:
+          - name: PORT
+            value: "50443"

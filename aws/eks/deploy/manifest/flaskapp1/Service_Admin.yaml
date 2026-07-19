@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${EKS_APP_ADMIN_NAME}-svc
+  namespace: ${EKS_NAMESPACE}
+spec:
+#  serviceAccountName: $EKS_SERVICE_ACCOUNT
+  type: LoadBalancer
+  selector:
+    app: ${EKS_APP_ADMIN_NAME}
+  ports:
+  - port: 30443
+    targetPort: 30443

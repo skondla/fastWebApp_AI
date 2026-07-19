@@ -1,0 +1,94 @@
+network : bridge
+[
+    {
+        "Name": "bridge",
+        "Id": "49499b6a9a1e5a6ce7c7e2ac7efe81b06078b0bb9e18ad1d8e9f594fe1b1f371",
+        "Created": "2023-05-09T14:12:03.249887214Z",
+        "Scope": "local",
+        "Driver": "bridge",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": [
+                {
+                    "Subnet": "172.17.0.0/16",
+                    "Gateway": "172.17.0.1"
+                }
+            ]
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {
+            "1a271a259652c69daec74cc29fd76a10c10cce8e190f07c50ff2aee155f4a989": {
+                "Name": "flaskauthadmin",
+                "EndpointID": "83091d3ba65e5c025a8f064ddc5e0c686b72b2db88a941a78152b4fc492f8c2d",
+                "MacAddress": "02:42:ac:11:00:03",
+                "IPv4Address": "172.17.0.3/16",
+                "IPv6Address": ""
+            },
+            "a6fbb7e2cb04e22e9f79c14abc3a1d9ef8e0894a42bef0f8d7bdc8f399592395": {
+                "Name": "flaskauthuser",
+                "EndpointID": "a64fb400660bbed273593a7faabf9a778e85c4f1c2581c657789a32e1b530426",
+                "MacAddress": "02:42:ac:11:00:04",
+                "IPv4Address": "172.17.0.4/16",
+                "IPv6Address": ""
+            },
+            "c8c9fe99924b9c02769a063d28ac7bac6407a4f034749e5572cc1b0382706d8f": {
+                "Name": "boring_lamport",
+                "EndpointID": "f493a31146448f879038df72379b9532a4203835be420e509a0d2b8f49a04456",
+                "MacAddress": "02:42:ac:11:00:02",
+                "IPv4Address": "172.17.0.2/16",
+                "IPv6Address": ""
+            }
+        },
+        "Options": {
+            "com.docker.network.bridge.default_bridge": "true",
+            "com.docker.network.bridge.enable_icc": "true",
+            "com.docker.network.bridge.enable_ip_masquerade": "true",
+            "com.docker.network.bridge.host_binding_ipv4": "0.0.0.0",
+            "com.docker.network.bridge.name": "docker0",
+            "com.docker.network.driver.mtu": "1500"
+        },
+        "Labels": {}
+    }
+]
+network : host
+[
+    {
+        "Name": "host",
+        "Id": "e28eb4b5c4e5c2e587da7263513b8f22112a19053e1513042f84a3886b116174",
+        "Created": "2022-11-15T00:08:34.340030421Z",
+        "Scope": "local",
+        "Driver": "host",
+        "EnableIPv6": false,
+        "IPAM": {
+            "Driver": "default",
+            "Options": null,
+            "Config": []
+        },
+        "Internal": false,
+        "Attachable": false,
+        "Ingress": false,
+        "ConfigFrom": {
+            "Network": ""
+        },
+        "ConfigOnly": false,
+        "Containers": {},
+        "Options": {},
+        "Labels": {}
+    }
+]
+network : ipvlan
+[]
+network : macvlan
+[]
+network : null
+[]
+network : overlay
+[]

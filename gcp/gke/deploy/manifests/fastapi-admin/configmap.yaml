@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-admin-config
+  namespace: fastapi-namespace
+data:
+  APP_PORT: "30443"
+  LOG_LEVEL: "info"
+  SLACK_WEBHOOK_URL: "CHANGEME-slack-webhook-url"

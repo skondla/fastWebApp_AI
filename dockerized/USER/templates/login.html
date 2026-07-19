@@ -1,0 +1,83 @@
+<!-- templates/login.html — FastAPI JWT login UI -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="column is-5 is-offset-3">
+    <h3 class="title">&#128274; DB Restore Tool — Login</h3>
+    <p class="subtitle has-text-white-ter">
+        Secured with JWT OAuth&nbsp;2.0
+    </p>
+
+    <div class="box">
+        <!-- Success message (after signup) -->
+        {% if message %}
+        <div class="notification is-success is-light">
+            ✅ {{ message }}
+        </div>
+        {% endif %}
+
+        <!-- Error message -->
+        {% if error %}
+        <div class="notification is-danger is-light">
+            ❌ {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="POST" action="/login">
+            <!-- Hidden field so the next-URL survives the POST -->
+            <input type="hidden" name="next" value="{{ next or '/restore' }}">
+
+            <div class="field">
+                <label class="label">Email</label>
+                <div class="control has-icons-left">
+                    <input class="input is-medium"
+                           type="email"
+                           name="email"
+                           placeholder="your@email.com"
+                           autocomplete="email"
+                           required
+                           autofocus>
+                    <span class="icon is-small is-left">&#9993;</span>
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="label">Password</label>
+                <div class="control has-icons-left">
+                    <input class="input is-medium"
+                           type="password"
+                           name="password"
+                           placeholder="&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;"
+                           autocomplete="current-password"
+                           required>
+                    <span class="icon is-small is-left">&#128274;</span>
+                </div>
+            </div>
+
+            <div class="field">
+                <label class="checkbox">
+                    <input type="checkbox" name="remember" value="1">
+                    &nbsp;Remember me for 7 days
+                </label>
+            </div>
+
+            <div class="field mt-4">
+                <button class="button is-info is-medium is-fullwidth">
+                    Login &amp; get JWT token
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <p class="has-text-centered has-text-white-ter">
+        No account? <a href="/signup" class="has-text-white"><strong>Sign Up</strong></a>
+    </p>
+    <p class="has-text-centered has-text-white-ter mt-2" style="font-size:0.85rem;">
+        Developers: use
+        <a href="/api/docs" class="has-text-white" target="_blank">
+            <strong>POST /auth/token</strong>
+        </a>
+        for programmatic JWT access.
+    </p>
+</div>
+{% endblock %}

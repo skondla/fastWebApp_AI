@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!-- templates/base.html — FastAPI / Jinja2 (migrated from Flask) -->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DB Restore Management Tool</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
+    <style>
+        .navbar-item { font-weight: 500; }
+        .jwt-badge {
+            font-size: 0.7rem;
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+<section class="hero is-primary is-fullheight">
+
+    <div class="hero-head">
+        <nav class="navbar" role="navigation" aria-label="main navigation">
+            <div class="container">
+                <div class="navbar-brand">
+                    <span class="navbar-item has-text-weight-bold">
+                        &#128197; DB Restore Tool
+                        <span class="jwt-badge">FastAPI + JWT</span>
+                    </span>
+                </div>
+
+                <div class="navbar-menu">
+                    <div class="navbar-end">
+                        <a href="/" class="navbar-item">Home</a>
+
+                        {% if current_user %}
+                        <a href="/restore" class="navbar-item">RestoreDB</a>
+                        <a href="/status"  class="navbar-item">Status</a>
+                        <a href="/attachdb" class="navbar-item">AttachDB</a>
+                        {% endif %}
+
+                        {% if not current_user %}
+                        <a href="/login"  class="navbar-item">Login</a>
+                        <a href="/signup" class="navbar-item">Sign Up</a>
+                        {% else %}
+                        <div class="navbar-item">
+                            <span class="has-text-white-ter">
+                                &#128100; {{ current_user.name }}
+                            </span>
+                        </div>
+                        <a href="/logout" class="navbar-item">Logout</a>
+                        {% endif %}
+
+                        <a href="/api/docs" class="navbar-item" target="_blank"
+                           title="Swagger UI — test JWT OAuth2 API">
+                            &#128196; API Docs
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </div>
+
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+</section>
+</body>
+</html>

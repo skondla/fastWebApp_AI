@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-admin-app
+  namespace: fastapi-namespace
+  labels:
+    app: fastapi-admin-app
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-resource-group: fastapi-rg
+spec:
+  type: LoadBalancer
+  selector:
+    app: fastapi-admin-app
+  ports:
+    - name: https
+      port: 30443
+      targetPort: 30443
+      protocol: TCP

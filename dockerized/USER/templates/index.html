@@ -1,0 +1,43 @@
+<!-- templates/index.html — Home page -->
+{% extends "base.html" %}
+
+{% block content %}
+<h1 class="title is-2">
+    &#128197; Database Restore Management Tool
+</h1>
+<h2 class="subtitle is-5 has-text-white-ter">
+    FastAPI &bull; JWT OAuth&nbsp;2.0 &bull; PostgreSQL &bull; AWS RDS
+</h2>
+
+{% if current_user %}
+<p class="has-text-white-ter mb-4">
+    Welcome back, <strong>{{ current_user.name }}</strong>!
+    Choose an operation from the navigation bar above.
+</p>
+<div class="buttons is-centered">
+    <a href="/restore"  class="button is-light is-medium">&#9851;  Restore DB</a>
+    <a href="/status"   class="button is-light is-medium">&#128270; Check Status</a>
+    <a href="/attachdb" class="button is-light is-medium">&#128279; Attach Instance</a>
+</div>
+{% else %}
+<p class="has-text-white-ter mb-4">
+    Login credentials are required to use this tool.
+</p>
+<div class="buttons is-centered">
+    <a href="/login"  class="button is-light is-medium">&#128274; Login</a>
+    <a href="/signup" class="button is-outlined is-light is-medium">&#128221; Sign Up</a>
+</div>
+{% endif %}
+
+<div class="mt-6" style="font-size:0.85rem; opacity:0.7;">
+    <p>
+        &#128196; Programmatic access:
+        <a href="/api/docs" class="has-text-white" target="_blank">Swagger UI</a>
+        &mdash;
+        <code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px;">
+            POST /auth/token
+        </code>
+        returns a JWT Bearer token.
+    </p>
+</div>
+{% endblock %}

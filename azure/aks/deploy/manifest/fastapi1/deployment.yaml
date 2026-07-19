@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-user-app
+  namespace: fastapi-namespace
+  labels:
+    app: fastapi-user-app
+    version: "latest"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: fastapi-user-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels:
+        app: fastapi-user-app
+        version: "latest"
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: fastapi-sa
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: fastapi-user-app-secrets
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command: ["sh", "-c", "until nc -z $shost $sport; do sleep 3; done"]
+          envFrom:
+            - secretRef: { name: fastapi-db-secret }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+      containers:
+        - name: fastapi-user-app
+          image: fastapiregistry.azurecr.io/fastapi-user-app:latest
+          imagePullPolicy: Always
+          ports:
+            - name: https
+              containerPort: 50443
+          envFrom:
+            - secretRef: { name: fastapi-db-secret }
+            - configMapRef: { name: fastapi-config }
+          resources:
+            requests: { cpu: "250m", memory: "256Mi" }
+            limits:   { cpu: "1000m", memory: "512Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /, port: 50443, scheme: HTTPS }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /, port: 50443, scheme: HTTPS }
+            initialDelaySeconds: 30
+            periodSeconds: 30

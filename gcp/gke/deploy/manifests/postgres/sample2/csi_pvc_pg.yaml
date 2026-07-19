@@ -1,0 +1,14 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: podpvc
+  namespace: flaskapp1-namespace 
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: csi-gce-pd
+  resources:
+    requests:
+      storage: 50Gi
+
+

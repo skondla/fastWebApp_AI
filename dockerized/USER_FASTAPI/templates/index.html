@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+
+<script>
+const _CTX = {
+  isAuthenticated: {{ 'true' if current_user else 'false' }},
+  userName: {{ (current_user.name if current_user else '') | tojson }},
+};
+</script>
+
+<div id="index-root"></div>
+
+<script type="text/babel">
+function IndexPage() {
+  const { isAuthenticated: auth, userName } = _CTX;
+
+  const features = [
+    { icon: '⚙️', title: 'DB Restore',    href: '/restore',  desc: 'Restore a database from an RDS snapshot to a new cluster endpoint.',   cta: 'Restore DB' },
+    { icon: '🔍', title: 'Check Status',  href: '/status',   desc: 'Poll restore status for a snapshot by name and original endpoint.',    cta: 'Check Status' },
+    { icon: '🔗', title: 'Attach DB',     href: '/attachdb', desc: 'Attach a new DB instance to an existing Aurora cluster endpoint.',     cta: 'Attach Instance' },
+    { icon: '📡', title: 'REST API',      href: '/api/docs', desc: 'OpenAPI 3.0 docs. Use JWT Bearer tokens for programmatic access.',     cta: 'Open API Docs', external: true },
+  ];
+
+  return (
+    <div className="animate-fade-in">
+      <div className="text-center py-16">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-900/40 border border-blue-700/40 text-blue-300 text-xs font-medium mb-6">
+          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"/>
+          FastAPI 2.0 &middot; JWT OAuth 2.0
+        </div>
+
+        <h1 className="text-5xl sm:text-6xl font-extrabold text-white tracking-tight mb-4">
+          Database{' '}
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+            Restore
+          </span>
+        </h1>
+        <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-4">
+          Restore, attach, and monitor Amazon RDS / Aurora clusters
+          through a secure, JWT-authenticated web interface.
+        </p>
+
+        {auth && userName && (
+          <p className="text-slate-500 text-sm mb-8">
+            Welcome back, <span className="text-slate-300 font-medium">{userName}</span>!
+          </p>
+        )}
+
+        {auth ? (
+          <div className="flex flex-wrap gap-4 justify-center">
+            <a href="/restore"
+               className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-all shadow-lg shadow-blue-900/40 flex items-center gap-2">
+              ⚙️ Restore Database
+            </a>
+            <a href="/status"
+               className="px-6 py-3 rounded-xl bg-slate-700/60 hover:bg-slate-700 border border-slate-600/60 text-slate-200 font-semibold transition-all flex items-center gap-2">
+              🔍 Check Status
+            </a>
+            <a href="/attachdb"
+               className="px-6 py-3 rounded-xl bg-slate-700/60 hover:bg-slate-700 border border-slate-600/60 text-slate-200 font-semibold transition-all flex items-center gap-2">
+              🔗 Attach DB
+            </a>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-4 justify-center">
+            <a href="/login"
+               className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold transition-all shadow-lg shadow-blue-900/40 flex items-center gap-2">
+              🔐 Login to get started
+            </a>
+            <a href="/signup"
+               className="px-6 py-3 rounded-xl bg-slate-700/60 hover:bg-slate-700 border border-slate-600/60 text-slate-200 font-semibold transition-all flex items-center gap-2">
+              📋 Sign Up
+            </a>
+          </div>
+        )}
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        {features.map(f => (
+          <div key={f.title} className="glass border border-slate-700/40 rounded-2xl p-6 hover:border-blue-700/40 transition-all">
+            <div className="text-3xl mb-3">{f.icon}</div>
+            <h3 className="text-white font-semibold mb-2">{f.title}</h3>
+            <p className="text-slate-400 text-sm leading-relaxed mb-4">{f.desc}</p>
+            {auth && (
+              <a href={f.href} target={f.external ? '_blank' : undefined}
+                 className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors">
+                {f.cta} →
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {!auth && (
+        <p className="text-center text-slate-600 mt-10 text-sm">
+          📡 Programmatic access:{' '}
+          <a href="/api/docs" target="_blank" className="text-slate-500 hover:text-slate-400 transition-colors">
+            POST /auth/token
+          </a>{' '}returns a JWT Bearer token
+        </p>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('index-root')).render(<IndexPage />);
+</script>
+{% endblock %}

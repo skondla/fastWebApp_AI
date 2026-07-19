@@ -1,0 +1,86 @@
+<!-- templates/attachdb.html — Attach DB instance to cluster form -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="column is-8 is-offset-2">
+    <h3 class="title is-3">&#128279; Attach DB Instance to Cluster</h3>
+    <p class="subtitle has-text-white-ter">
+        Welcome, <strong>{{ name }}</strong>! &nbsp;&bull;&nbsp; Client IP: {{ client_ip }}
+    </p>
+
+    {% if error %}
+    <div class="notification is-danger is-light">
+        ❌ {{ error }}
+        <a href="/login">Return to login</a>.
+    </div>
+    {% endif %}
+
+    <div class="box">
+        <form method="POST" action="/attachdb">
+            <div class="field">
+                <label class="label">DB Cluster Endpoint</label>
+                <div class="control">
+                    <input class="input is-medium"
+                           type="text"
+                           name="endpoint"
+                           placeholder="cluster.xxxx.us-east-1.rds.amazonaws.com"
+                           size="75"
+                           style="color:blue;"
+                           required>
+                </div>
+                <p class="help">Must be a cluster endpoint (URL contains "cluster").</p>
+            </div>
+
+            <div class="field">
+                <label class="label">Instance Class</label>
+                <div class="control">
+                    <div class="select is-medium is-fullwidth">
+                        <select name="instanceclass" id="instanceclass">
+                            <optgroup label="T3 family">
+                                <option value="db.t3.micro">db.t3.micro</option>
+                                <option value="db.t3.small" selected>db.t3.small</option>
+                                <option value="db.t3.medium">db.t3.medium</option>
+                                <option value="db.t3.xlarge">db.t3.xlarge</option>
+                                <option value="db.t3.2xlarge">db.t3.2xlarge</option>
+                            </optgroup>
+                            <optgroup label="T2 family">
+                                <option value="db.t2.micro">db.t2.micro</option>
+                                <option value="db.t2.small">db.t2.small</option>
+                                <option value="db.t2.medium">db.t2.medium</option>
+                                <option value="db.t2.large">db.t2.large</option>
+                                <option value="db.t2.2xlarge">db.t2.2xlarge</option>
+                            </optgroup>
+                            <optgroup label="M5 family">
+                                <option value="db.m5.large">db.m5.large</option>
+                                <option value="db.m5.xlarge">db.m5.xlarge</option>
+                                <option value="db.m5.2xlarge">db.m5.2xlarge</option>
+                                <option value="db.m5.4xlarge">db.m5.4xlarge</option>
+                            </optgroup>
+                            <optgroup label="R5 family">
+                                <option value="db.r5.large">db.r5.large</option>
+                                <option value="db.r5.xlarge">db.r5.xlarge</option>
+                                <option value="db.r5.2xlarge">db.r5.2xlarge</option>
+                                <option value="db.r5.4xlarge">db.r5.4xlarge</option>
+                                <option value="db.r5.8xlarge">db.r5.8xlarge</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="field is-grouped mt-4">
+                <div class="control">
+                    <button class="button is-primary is-medium" type="submit">
+                        &#128279; Attach Instance
+                    </button>
+                </div>
+                <div class="control">
+                    <button class="button is-light is-medium" type="reset">
+                        &#10006; Reset
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

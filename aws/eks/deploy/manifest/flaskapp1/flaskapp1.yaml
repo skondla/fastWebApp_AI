@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${EKS_NAMESPACE}
+  labels:
+    name: ${EKS_NAMESPACE}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${EKS_SERVICE_ACCOUNT}
+  namespace: ${EKS_NAMESPACE}
+

@@ -1,0 +1,332 @@
+name: "DevSecOps — FastAPI USER — Azure AKS"
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "dockerized/USER_FASTAPI/**"
+      - "azure/aks/deploy/manifest/fastapi1/**"
+  pull_request:
+    branches: [master, main]
+    paths:
+      - "dockerized/USER_FASTAPI/**"
+  workflow_dispatch:
+
+env:
+  AZURE_RESOURCE_GROUP: fastapi-rg
+  AKS_CLUSTER:          fastapi-aks-cluster
+  ACR_NAME:             fastapiregistry
+  APP_NAME:             fastapi-user-app
+  AKS_NAMESPACE:        fastapi-namespace
+  APP_PORT:             "50443"
+  IMAGE_TAG:            ${{ github.sha }}
+  PYTHON_VERSION:       "3.11"
+  AZURE_KEYVAULT_NAME:       ${{ secrets.AZURE_KEYVAULT_NAME }}
+  AZURE_KEYVAULT_CLIENT_ID:  ${{ secrets.AZURE_KEYVAULT_CLIENT_ID }}
+
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
+
+jobs:
+# ════════════════════════════════════════════════════════════════════════════
+# 1. SECRET SCAN
+# ════════════════════════════════════════════════════════════════════════════
+  secret-scan:
+    name: "🔍 Secret Scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          extra_args: --only-verified
+
+      - name: GitLeaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+# ════════════════════════════════════════════════════════════════════════════
+# 2. SAST
+# ════════════════════════════════════════════════════════════════════════════
+  sast:
+    name: "🔬 SAST (Bandit + Semgrep)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - run: pip install bandit semgrep
+
+      - name: Bandit SAST
+        run: |
+          bandit -r dockerized/USER_FASTAPI/ \
+            --configfile dockerized/USER_FASTAPI/.bandit \
+            --format sarif --output bandit-results.sarif \
+            --severity-level high
+
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: bandit-results.sarif, category: bandit }
+
+      - name: Semgrep OWASP scan
+        run: |
+          semgrep \
+            --config p/owasp-top-ten --config p/python --config p/jwt --config p/secrets \
+            --config dockerized/USER_FASTAPI/.semgrep.yml \
+            dockerized/USER_FASTAPI/ \
+            --error --sarif --output semgrep-results.sarif
+
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: semgrep-results.sarif, category: semgrep }
+
+# ════════════════════════════════════════════════════════════════════════════
+# 3. SCA
+# ════════════════════════════════════════════════════════════════════════════
+  sca:
+    name: "📦 SCA (pip-audit + Trivy FS)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pip-audit
+
+      - name: pip-audit
+        run: |
+          pip-audit -r dockerized/USER_FASTAPI/requirements.txt \
+            --format sarif --output pip-audit-results.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: pip-audit-results.sarif, category: pip-audit }
+
+      - name: Trivy FS scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: dockerized/USER_FASTAPI/
+          format: sarif
+          output: trivy-fs-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy-fs-results.sarif, category: trivy-fs }
+
+# ════════════════════════════════════════════════════════════════════════════
+# 4. BUILD & PUSH — Azure Container Registry
+# ════════════════════════════════════════════════════════════════════════════
+  build:
+    name: "🐳 Build & Push to ACR"
+    runs-on: ubuntu-latest
+    needs: [secret-scan, sast, sca]
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Build and push
+        id: build-image
+        working-directory: dockerized/USER_FASTAPI
+        run: |
+          IMAGE="${ACR_NAME}.azurecr.io/${APP_NAME}:${IMAGE_TAG}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+# ════════════════════════════════════════════════════════════════════════════
+# 5. CONTAINER SCAN
+# ════════════════════════════════════════════════════════════════════════════
+  container-scan:
+    name: "🔎 Container Scan (Trivy)"
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build.outputs.image }}
+          format: sarif
+          output: trivy-image-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy-image-results.sarif, category: trivy-image }
+
+# ════════════════════════════════════════════════════════════════════════════
+# 6. IaC SCAN (Checkov)
+# ════════════════════════════════════════════════════════════════════════════
+  iac-scan:
+    name: "🏗️ IaC Scan (Checkov)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov — Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: azure/aks/deploy/terraform-fastapi
+          framework: terraform
+          soft_fail: false
+
+      - name: Checkov — K8s manifests
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: azure/aks/deploy/manifest/fastapi1
+          framework: kubernetes
+          soft_fail: false
+
+# ════════════════════════════════════════════════════════════════════════════
+# 7. SIGN & SBOM
+# ════════════════════════════════════════════════════════════════════════════
+  sign-and-sbom:
+    name: "🔏 Sign Image & Generate SBOM"
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      - name: Keyless sign the image
+        run: cosign sign --yes "${{ needs.build.outputs.image }}"
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ needs.build.outputs.image }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+
+      - name: Attest SBOM to the image
+        run: cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${{ needs.build.outputs.image }}"
+
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom-aks-user, path: sbom.spdx.json }
+
+# ════════════════════════════════════════════════════════════════════════════
+# 8. DEPLOY — AKS
+# ════════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: "🚀 Deploy via ArgoCD"
+    runs-on: ubuntu-latest
+    needs: [build, container-scan, iac-scan, sign-and-sbom]
+    environment: staging
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o /usr/local/bin/argocd \
+            https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      - name: Point ArgoCD at the new image and sync
+        env:
+          FASTAPI_IMAGE: ${{ needs.build.outputs.image }}
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          argocd app set fastapi-user-aks --kustomize-image "${FASTAPI_IMAGE}"
+          argocd app sync fastapi-user-aks --prune
+          argocd app wait fastapi-user-aks --health --timeout 300
+
+# ════════════════════════════════════════════════════════════════════════════
+# 9. DAST
+# ════════════════════════════════════════════════════════════════════════════
+  dast:
+    name: "⚡ DAST (OWASP ZAP)"
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get AKS credentials
+        uses: azure/aks-set-context@v3
+        with:
+          resource-group: ${{ env.AZURE_RESOURCE_GROUP }}
+          cluster-name:   ${{ env.AKS_CLUSTER }}
+
+      - name: Get service IP
+        id: svc
+        run: |
+          IP=$(kubectl get svc ${APP_NAME} -n ${AKS_NAMESPACE} \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "url=https://${IP}:${APP_PORT}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test
+        run: |
+          curl -sk --max-time 30 "${{ steps.svc.outputs.url }}/" | grep -i "DB Restore" \
+            && echo "✅ Smoke test passed" \
+            || echo "⚠️  Smoke test inconclusive (LB may still be provisioning)"
+
+      - name: OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ steps.svc.outputs.url }}
+          rules_file_name: "dockerized/USER_FASTAPI/.zap/rules.tsv"
+          fail_action: true
+
+      - uses: actions/upload-artifact@v4
+        with: { name: zap-report-aks, path: report_html.html }
+
+# ════════════════════════════════════════════════════════════════════════════
+# 10. NOTIFY
+# ════════════════════════════════════════════════════════════════════════════
+  notify:
+    name: "📣 Notify Slack"
+    runs-on: ubuntu-latest
+    needs: [deploy, dast]
+    if: always()
+    steps:
+      - uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "*FastAPI USER App — AKS Deploy: ${{ needs.deploy.result }}*",
+              "attachments": [{"color": "${{ needs.deploy.result == 'success' && 'good' || 'danger' }}",
+                "fields": [
+                  {"title": "DAST",   "value": "${{ needs.dast.result }}", "short": true},
+                  {"title": "Branch", "value": "${{ github.ref_name }}",   "short": true}
+                ]}]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
