@@ -605,10 +605,11 @@ sequenceDiagram
     end
 
     alt credentials valid
-        Auth->>Sec: create_access_token<br/>sub=email · exp=30m
-        Auth->>Sec: create_refresh_token<br/>sub=email · exp=7d
+        Auth->>Sec: create_access_token<br/>sub=email · exp=30m · jti
+        Auth->>Sec: create_refresh_token<br/>sub=email · exp=7d · jti + family id
+        Sec->>Sec: register refresh family<br/>in token store (Redis)
         Sec-->>Auth: access_jwt + refresh_jwt
-        Auth-->>User: 200 OK<br/>access_token + refresh_token<br/>Set-Cookie HttpOnly
+        Auth-->>User: 200 OK<br/>access_token + refresh_token<br/>Set-Cookie HttpOnly Secure
     else credentials invalid
         Auth-->>User: 401 Unauthorized<br/>WWW-Authenticate Bearer
     end
@@ -618,12 +619,15 @@ sequenceDiagram
     User->>LB: GET /restore<br/>Cookie access_token=Bearer JWT
     LB->>MW: forward
     MW->>Sec: get_current_user via Depends
-    Sec->>Sec: decode JWT<br/>HS256 · SECRET_KEY
+    Sec->>Sec: verify JWT signature + exp<br/>RS256 public key (HS256 dev fallback)
+    Sec->>Sec: check jti against denylist<br/>token store (Redis)
     Sec->>DB: lookup user by sub claim
     DB-->>Sec: user
     Sec-->>MW: User object
     MW-->>User: 200 OK<br/>restore page HTML
 ```
+
+Refresh-token rotation, reuse detection, and server-side logout revocation are diagrammed in [Security Hardening](#security-hardening--jwt-sessions--rate-limiting).
 
 ### RDS Restore Operation — End-to-End
 
@@ -742,7 +746,7 @@ flowchart TB
     subgraph REQPATH["Request Path  (outer to inner)"]
         direction TB
         AUDIT_IN["1. SecurityAuditMiddleware<br/>start timer · capture client IP"]:::pass
-        RATE{"2. RateLimitMiddleware<br/>200/min general<br/>10/min auth endpoints"}
+        RATE{"2. RateLimitMiddleware<br/>200/min general · 10/min auth<br/>global via Redis token store"}
         R429["429 Too Many Requests<br/>Retry-After 60"]:::block
         HDR_IN["3. SecurityHeadersMiddleware<br/>pass-through on request"]:::pass
         CORS["4. CORSMiddleware<br/>origin · methods · headers"]:::pass
@@ -1025,6 +1029,61 @@ Manifest-level hardening is now **cluster-enforced** so a future edit (or a manu
 
 This closes the supply chain end-to-end: **build → sign/attest (CI) → verify (admission)** — the cluster no longer accepts "anything from the registry". Roll out new policies warn-then-block (Audit → Enforce) per [`kubernetes/policies/README.md`](kubernetes/policies/README.md). Service mesh / mTLS was evaluated and deliberately deferred with recorded revisit triggers ([ADR-0004](docs/adr/0004-defer-service-mesh.md)).
 
+#### Supply Chain — From Source to Admitted Pod
+
+```mermaid
+flowchart LR
+    classDef src fill:#FFF8E1,stroke:#F57F17,color:#E65100
+    classDef ci fill:#E0F7FA,stroke:#00838F,color:#006064
+    classDef art fill:#E8EAF6,stroke:#283593,color:#1A237E
+    classDef verify fill:#FCE4EC,stroke:#AD1457,color:#880E4F
+    classDef pass fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef block fill:#FFEBEE,stroke:#C62828,color:#B71C1C
+
+    SRC["Source commit<br/>signed-off PR · CODEOWNERS"]:::src
+
+    subgraph CI["CI — sign-and-sbom job (OIDC identity, no static keys)"]
+        direction TB
+        BUILD["docker build + push<br/>tag = git SHA"]:::ci
+        SIGN["cosign sign --yes<br/>keyless via GitHub OIDC"]:::ci
+        SBOM["syft SBOM (SPDX)<br/>cosign attest --type spdxjson"]:::ci
+        PROV["SLSA provenance predicate<br/>cosign attest --type slsaprovenance1"]:::ci
+        BUILD --> SIGN --> SBOM --> PROV
+    end
+
+    subgraph REG["Registry  (ECR / ACR / GAR)"]
+        direction TB
+        IMG["image digest"]:::art
+        ATT["signature + SBOM + provenance<br/>attestations"]:::art
+    end
+
+    REKOR[("Rekor<br/>transparency log")]:::art
+
+    ARGO["ArgoCD sync<br/>sole applier — ADR-0001"]:::ci
+
+    subgraph ADMIT["Kyverno admission — verify-image-signatures (failurePolicy: Fail)"]
+        direction TB
+        V1{"signature valid?<br/>issuer = GitHub OIDC<br/>subject = this repo"}:::verify
+        V2{"SBOM attestation<br/>valid?"}:::verify
+        V3{"SLSA provenance<br/>valid?"}:::verify
+        MUT["mutate tag → digest<br/>what was verified is what runs"]:::pass
+    end
+
+    POD["Pod scheduled<br/>PSS restricted · default-deny netpol"]:::pass
+    REJ["ADMISSION DENIED<br/>unsigned/unattested image"]:::block
+
+    SRC --> BUILD
+    SIGN -.-> REKOR
+    PROV --> IMG
+    IMG --- ATT
+    ATT --> ARGO
+    ARGO --> V1
+    V1 -->|yes| V2 -->|yes| V3 -->|yes| MUT --> POD
+    V1 -->|no| REJ
+    V2 -->|no| REJ
+    V3 -->|no| REJ
+```
+
 ---
 
 ## CI/CD Pipeline
@@ -1299,6 +1358,41 @@ The auth layer closes every token-handling finding from the external analysis ([
 
 Shared token state lives in `token_store.py` (both apps, kept in lockstep): Redis-backed when `REDIS_URL` is set, thread-safe in-process otherwise.
 
+#### Token Lifecycle — Rotation, Reuse Detection & Revocation
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as "Legitimate Client"
+    actor Thief as "Attacker<br/>stolen refresh cookie"
+    participant Auth as "auth.py<br/>POST /auth/refresh · GET /logout"
+    participant Sec as "security.py"
+    participant TS as "token_store.py<br/>Redis (shared by all replicas)"
+
+    Note over User,TS: Normal rotation-on-use
+    User->>Auth: POST /auth/refresh<br/>refresh cookie (jti=A · fid=F)
+    Auth->>Sec: decode_token + rotate_refresh_token
+    Sec->>TS: family F current == A ?
+    TS-->>Sec: yes → set current = B
+    Sec-->>Auth: new refresh (jti=B · fid=F)
+    Auth-->>User: 200 OK<br/>new access + new refresh<br/>Set-Cookie rotated
+
+    Note over Thief,TS: Replay of the rotated-out token
+    Thief->>Auth: POST /auth/refresh<br/>stolen refresh (jti=A · fid=F)
+    Auth->>Sec: rotate_refresh_token
+    Sec->>TS: family F current == A ?
+    TS-->>Sec: no (current is B) → REUSE
+    Sec->>TS: revoke family F<br/>thief AND victim tokens die
+    Auth-->>Thief: 401 session revoked<br/>cookies cleared
+
+    Note over User,TS: Server-side logout
+    User->>Auth: GET /logout
+    Auth->>Sec: revoke_token(access) + revoke_token(refresh)
+    Sec->>TS: denylist jti until exp<br/>delete family F
+    Auth-->>User: 302 /login<br/>cookies cleared
+    Note over TS: Every later decode_token checks<br/>the jti denylist → stolen access<br/>tokens are dead immediately
+```
+
 ---
 
 ## Observability & SRE
@@ -1310,6 +1404,56 @@ The Prometheus/Grafana/RabbitMQ operators were already installed; the **practice
 - **Dashboard** — [`kubernetes/observability/grafana-dashboard.yaml`](kubernetes/observability/grafana-dashboard.yaml): golden signals + SLO overlays, reconciled by the grafana-operator (dashboard-as-code, not click-ops).
 - **App instrumentation** — `telemetry.py` in both apps: Prometheus `/metrics` (scraped via the committed [`ServiceMonitor`](kubernetes/observability/servicemonitor.yaml)), optional OpenTelemetry tracing (`OTEL_EXPORTER_OTLP_ENDPOINT`), structured JSON logs (`LOG_FORMAT=json`), and a dependency-free `/healthz`.
 - **Synthetic monitoring** — [`actions/synthetic-monitor.yml`](actions/synthetic-monitor.yml) probes the public endpoints every 10 minutes from outside the cluster, catching LB/DNS/cert failures in-cluster probes can't see.
+
+#### Observability Architecture — Signals to Action
+
+```mermaid
+flowchart LR
+    classDef app fill:#E8EAF6,stroke:#283593,color:#1A237E
+    classDef collect fill:#E0F7FA,stroke:#00838F,color:#006064
+    classDef rule fill:#FFF8E1,stroke:#F57F17,color:#E65100
+    classDef act fill:#FFEBEE,stroke:#C62828,color:#B71C1C
+    classDef view fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef ext fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+
+    subgraph PODS["FastAPI pods — telemetry.py (env-gated)"]
+        direction TB
+        MET["/metrics<br/>Prometheus instrumentator"]:::app
+        TRC["OTel traces → OTLP<br/>FastAPI · SQLAlchemy · requests"]:::app
+        LOGS["JSON logs<br/>LOG_FORMAT=json"]:::app
+        HZ["/healthz<br/>no auth · no DB"]:::app
+    end
+
+    subgraph COLLECT["Collection (operators from kubernetes/operators/)"]
+        direction TB
+        SM["ServiceMonitor<br/>scrape /metrics 30s"]:::collect
+        PROM["Prometheus"]:::collect
+        OTELC["OTel Collector<br/>OTEL_EXPORTER_OTLP_ENDPOINT"]:::collect
+        LOKI["Log pipeline<br/>CloudWatch / Cloud Logging"]:::collect
+    end
+
+    subgraph RULES["Committed practice — kubernetes/observability/ + docs/slo.md"]
+        direction TB
+        SLO["SLOs: 99.5% avail<br/>p95 < 500ms · error budget"]:::rule
+        PR["PrometheusRule<br/>burn-rate 14.4x page · 3x ticket<br/>latency · outage · 429 auth spike"]:::rule
+        DASH["GrafanaDashboard CR<br/>golden signals + SLO overlays"]:::view
+    end
+
+    AM["Alertmanager<br/>AlertmanagerConfig"]:::act
+    SLACK["Slack #devsecops-alerts"]:::act
+    IR["Incident response runbook<br/>docs/governance/ · AI postmortem draft"]:::act
+
+    SYN["Synthetic monitor<br/>GitHub Actions · every 10 min<br/>outside the cluster"]:::ext
+
+    MET --> SM --> PROM
+    TRC --> OTELC
+    LOGS --> LOKI
+    SLO -.defines.-> PR
+    PROM --> PR --> AM --> SLACK --> IR
+    PROM --> DASH
+    SYN -->|probe| HZ
+    SYN -->|failure| SLACK
+```
 
 ---
 
@@ -1349,6 +1493,65 @@ The modernization layer ([ADR-0005](docs/adr/0005-ai-native-devsecops.md)) — A
 | Shift-left hooks | [`.pre-commit-config.yaml`](.pre-commit-config.yaml) | GitLeaks + Bandit + private-key detection at the developer keyboard |
 
 Setup and usage examples: [`ai/README.md`](ai/README.md). CI needs the `ANTHROPIC_API_KEY` secret; its absence degrades gracefully (AI jobs fail independently of the security gates).
+
+#### AI-Native DevSecOps Architecture — Agents, MCP, Human Gates
+
+```mermaid
+flowchart LR
+    classDef src fill:#E8EAF6,stroke:#283593,color:#1A237E
+    classDef agent fill:#F3E5F5,stroke:#6A1B9A,color:#4A148C
+    classDef out fill:#FFF8E1,stroke:#F57F17,color:#E65100
+    classDef human fill:#E8F5E9,stroke:#2E7D32,color:#1B5E20
+    classDef llm fill:#FCE4EC,stroke:#AD1457,color:#880E4F
+
+    subgraph SRC["Signals"]
+        direction TB
+        SARIF["Open code-scanning alerts<br/>SARIF from 6 blocking scanners"]:::src
+        DIFF["Pull-request diffs"]:::src
+        INC["Incident logs ·<br/>PrometheusRule alerts"]:::src
+        OPS["Operator request<br/>restore workflow form"]:::src
+        STATE["Live state: pipeline runs ·<br/>deployments · governance docs"]:::src
+    end
+
+    CLAUDE(["Claude<br/>Anthropic API"]):::llm
+
+    subgraph AGENTS["Agents  (ai/ · actions/ · in-app)"]
+        direction TB
+        TRIAGE["SARIF triage agent<br/>nightly · dedupe + rank + fixes"]:::agent
+        REVIEW["AI code review<br/>claude-code-action on every PR"]:::agent
+        RUNBK["Runbook / postmortem<br/>generator CLI"]:::agent
+        ORCH["LangGraph restore orchestrator<br/>tool budget · guarded AWS calls"]:::agent
+        MCP["MCP server (read-only)<br/>.mcp.json → Claude Code / Desktop"]:::agent
+    end
+
+    subgraph OUT["Advisory outputs"]
+        direction TB
+        ISSUE["Rolling triage issue<br/>+ job summary"]:::out
+        CMTS["Inline PR comments<br/>severity + suggested fix"]:::out
+        DRAFT["Draft postmortems<br/>and runbooks"]:::out
+        PLAN["Executed workflow +<br/>step-by-step audit log"]:::out
+        ANS["Grounded answers<br/>posture · runs · deploys"]:::out
+    end
+
+    HUMAN["Humans gate every mutation:<br/>CODEOWNERS review · merge ·<br/>deploy approval · remediation"]:::human
+
+    SARIF --> TRIAGE --> ISSUE
+    DIFF --> REVIEW --> CMTS
+    INC --> RUNBK --> DRAFT
+    OPS --> ORCH --> PLAN
+    STATE --> MCP --> ANS
+
+    TRIAGE <--> CLAUDE
+    REVIEW <--> CLAUDE
+    RUNBK <--> CLAUDE
+    ORCH <--> CLAUDE
+
+    ISSUE --> HUMAN
+    CMTS --> HUMAN
+    DRAFT --> HUMAN
+    PLAN --> HUMAN
+    ANS --> HUMAN
+```
 
 ---
 
