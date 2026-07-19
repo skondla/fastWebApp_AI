@@ -39,11 +39,16 @@ A multi-cloud, containerized web application and REST API for managing AWS RDS d
   - [Kubernetes Service Mesh & Pod Networking](#kubernetes-service-mesh--pod-networking)
   - [Ingress & TLS Termination Flow](#ingress--tls-termination-flow)
 - [Infrastructure](#infrastructure)
+  - [Cluster Admission Policies — Kyverno](#cluster-admission-policies--kyverno)
 - [CI/CD Pipeline](#cicd-pipeline)
-  - [DevSecOps Pipeline — 9-Stage Flow](#devsecops-pipeline--9-stage-flow)
+  - [DevSecOps Pipeline — 10-Stage Flow](#devsecops-pipeline--10-stage-flow)
   - [Pipeline Stage Dependency Graph](#pipeline-stage-dependency-graph)
   - [GitOps Reconciliation Loop (ArgoCD)](#gitops-reconciliation-loop-argocd)
   - [Security Scanning Coverage Matrix](#security-scanning-coverage-matrix)
+- [Security Hardening — JWT, Sessions & Rate Limiting](#security-hardening--jwt-sessions--rate-limiting)
+- [Observability & SRE](#observability--sre)
+- [Governance & Compliance](#governance--compliance)
+- [AI-Native DevSecOps](#ai-native-devsecops)
 - [Getting Started](#getting-started)
 - [Usage — cURL Examples](#usage--curl-examples)
 - [Screenshots](#screenshots)
@@ -283,12 +288,15 @@ flowchart TB
 | Web Framework | **FastAPI** | **FastAPI** |
 | ASGI Server | **Uvicorn** | **Uvicorn** |
 | Templating | Jinja2 | Jinja2 |
-| Authentication | **JWT OAuth 2.0** (python-jose) | **JWT OAuth 2.0** (python-jose) |
+| Authentication | **JWT OAuth 2.0 — RS256** keypair (HS256 dev fallback), `jti` claims | **JWT OAuth 2.0 — RS256** keypair (HS256 dev fallback), `jti` claims |
+| Session Security | Refresh rotation-on-use + reuse detection, server-side `jti` denylist | Refresh rotation-on-use + reuse detection, server-side `jti` denylist |
+| Token/Limit State | **Redis** (`token_store.py`; in-process fallback) | **Redis** (`token_store.py`; in-process fallback) |
 | Password Hashing | bcrypt (passlib) + werkzeug fallback | bcrypt (passlib) + werkzeug fallback |
 | Schema Validation | **Pydantic v2** | **Pydantic v2** |
 | ORM | SQLAlchemy 2.0 | SQLAlchemy 2.0 |
 | Database | PostgreSQL (psycopg2) | PostgreSQL (psycopg2) |
-| Security | OWASP Top 10 middleware, rate-limiting, security headers | OWASP Top 10 middleware, rate-limiting, security headers |
+| Security | OWASP Top 10 middleware, **globally-enforced rate limits**, security headers, CORS allowlist | OWASP Top 10 middleware, **globally-enforced rate limits**, security headers, CORS allowlist, SSRF guard |
+| Observability | Prometheus `/metrics`, OpenTelemetry (OTLP), JSON logs, `/healthz` | Prometheus `/metrics`, OpenTelemetry (OTLP), JSON logs, `/healthz` |
 | AWS SDK | boto3 / botocore | boto3 / botocore |
 | HTTP Client | requests | requests |
 | Agentic Orchestration | — | **LangGraph** ReAct agent + **LangChain** tools over **Claude** (Anthropic) |
@@ -314,13 +322,15 @@ flowchart TB
 | Orchestration | Kubernetes (EKS, GKE, AKS) |
 | Manifest templating | Kustomize (per app × cloud base, `images:` transform for the deploy-time tag) |
 | IaC | Terraform (modular, AWS) |
-| CI/CD | GitHub Actions — 10-stage pipeline, all scan gates blocking |
+| CI/CD | GitHub Actions — 10-stage pipeline, all scan gates blocking, concurrency guards, DAST on PRs, reusable scan workflow |
 | GitOps | **ArgoCD** — sole applier of cluster state (CI calls the ArgoCD API only) |
-| Supply-chain integrity | cosign (keyless image signing) + syft SBOM (SPDX) + attestation |
+| Supply-chain integrity | cosign (keyless signing) + syft SBOM (SPDX) + **SLSA provenance** attestations, verified at admission |
+| Admission policy | **Kyverno** — signed/attested images only, PSS `restricted`, generated default-deny NetworkPolicy, `:latest` ban ([`kubernetes/policies/`](kubernetes/policies/)) |
 | Secrets | Secrets Store CSI Driver → AWS Secrets Manager / Azure Key Vault / GCP Secret Manager |
-| Network security | Kubernetes NetworkPolicy (ingress/egress baseline, all 6 app × cloud combos) |
+| Network security | Kubernetes NetworkPolicy (ingress/egress baseline, all 6 app × cloud combos) + Kyverno-generated default-deny |
 | Security Scanning | Trivy (CRITICAL/HIGH, blocking), Checkov (blocking) |
-| Observability | Prometheus + Grafana (K8s operators) |
+| Observability | Prometheus + Grafana operators **plus committed practice**: PrometheusRule SLO alerts, Grafana dashboard, ServiceMonitor, SLOs ([`docs/slo.md`](docs/slo.md)), synthetic monitor |
+| AI tooling | **Claude (Anthropic)** — SARIF triage agent, AI code review, runbook generator, MCP server ([`ai/`](ai/)); Renovate; pre-commit hooks |
 | Message Queue | RabbitMQ (K8s operator) |
 | Cloud Providers | AWS (primary), GCP, Azure |
 | TLS | Self-signed certs (containers) / ACM (AWS ALB) |
@@ -337,8 +347,10 @@ fastAPIWebApp/
 │   │   ├── database.py           # SQLAlchemy 2.0 engine + session factory
 │   │   ├── models.py             # ORM: User, Users (SQLAlchemy DeclarativeBase)
 │   │   ├── schemas.py            # Pydantic v2: UserCreate, UserResponse, Token
-│   │   ├── security.py           # JWT OAuth 2.0: create/decode tokens, bcrypt, dependencies
-│   │   ├── security_middleware.py# OWASP Top 10: security headers, rate-limit, audit log
+│   │   ├── security.py           # JWT OAuth 2.0: RS256 signing, refresh rotation, revocation
+│   │   ├── security_middleware.py# OWASP Top 10: security headers, global rate-limit, audit log
+│   │   ├── token_store.py        # Redis/in-process store: jti denylist, refresh families, rate counters
+│   │   ├── telemetry.py          # Prometheus /metrics, OTel tracing, JSON logs (env-gated)
 │   │   ├── routers/
 │   │   │   ├── auth.py           # /login /signup /logout + /auth/token /auth/me /auth/register
 │   │   │   └── main_router.py    # / (index), /profile (protected)
@@ -352,8 +364,10 @@ fastAPIWebApp/
 │   │   ├── database.py           # SQLAlchemy 2.0 engine + session factory
 │   │   ├── models.py             # ORM: User, Userinfo
 │   │   ├── schemas.py            # Pydantic v2: UserCreate, Token, RestoreRequest, ...
-│   │   ├── security.py           # JWT OAuth 2.0 + werkzeug pbkdf2 migration support
+│   │   ├── security.py           # JWT OAuth 2.0 (RS256 + rotation + revocation) + werkzeug migration
 │   │   ├── security_middleware.py# OWASP Top 10 middleware + SSRF endpoint validation
+│   │   ├── token_store.py        # Redis/in-process store: jti denylist, refresh families, rate counters
+│   │   ├── telemetry.py          # Prometheus /metrics, OTel tracing, JSON logs (env-gated)
 │   │   ├── routers/
 │   │   │   ├── auth.py           # /login /signup /logout + OAuth2 API endpoints
 │   │   │   └── main_router.py    # / /restore /status /attachdb /agent/restore-workflow
@@ -425,16 +439,42 @@ fastAPIWebApp/
 │       └── Service_user_ui.yaml       # K8s service for user
 │
 ├── kubernetes/
-│   └── operators/                # Grafana, Prometheus, RabbitMQ operators
+│   ├── operators/                # Grafana, Prometheus, RabbitMQ operators
+│   ├── policies/                 # Kyverno admission: verify signed/attested images, PSS
+│   │                             #   restricted, default-deny netpol generation, :latest ban
+│   └── observability/            # Committed practice: PrometheusRule SLO alerts,
+│                                 #   AlertmanagerConfig, Grafana dashboard, ServiceMonitor
 │
 ├── argocd/                       # Real ArgoCD (sole applier) — install script + Application CRs
 │   ├── helm/argocd.sh            # Installs argo/argo-cd (previously mislabeled: installed Argo Workflows)
 │   └── apps/                     # 6 Application CRs — one per app x cloud, syncPolicy.automated
 │
-├── actions/
-│   ├── Deploy-GKE.yml            # GKE DevSecOps pipeline (test → build → deploy)
-│   ├── google.yml                # GCP-specific workflow
+├── actions/                      # Workflow sources (deployed to .github/workflows/)
+│   ├── devsecops-fastapi-*.yml   # EKS / GKE / AKS pipelines — gates blocking, concurrency
+│   │                             #   guard, cosign sign + SBOM + SLSA provenance, DAST on PRs
+│   ├── reusable-security-scans.yml # workflow_call: shared secret/SAST/SCA/IaC stages
+│   ├── ai-code-review.yml        # Claude reviews every PR (advisory; CODEOWNERS still gate)
+│   ├── ai-security-triage.yml    # Nightly Claude triage of open code-scanning alerts
+│   ├── synthetic-monitor.yml     # External /healthz probe every 10 min → Slack
 │   └── trivy-scan.yaml           # Trivy CRITICAL vulnerability scanning → SARIF
+│
+├── ai/                           # AI-native DevSecOps layer (ADR-0005)
+│   ├── triage/sarif_triage.py    # Dedupe + rank open alerts, propose fixes → rolling issue
+│   ├── runbooks/generate_runbook.py # Draft postmortems & alert runbooks
+│   └── mcp/devsecops_mcp_server.py  # MCP server: posture, alerts, pipelines, deployments
+│
+├── docs/
+│   ├── slo.md                    # SLIs/SLOs, error-budget policy, alerting policy
+│   ├── gap-closure.md            # Finding-by-finding map of the expert-analysis gaps
+│   ├── adr/                      # Architecture decision records (0001–0005)
+│   └── governance/               # Incident response, DR (RTO/RPO), data classification,
+│                                 #   audit-log retention, branching strategy
+│
+├── .github/                      # CODEOWNERS, PR template, issue templates
+├── .mcp.json                     # Registers the DevSecOps MCP server for Claude Code
+├── .pre-commit-config.yaml       # GitLeaks + Bandit + hygiene hooks at the keyboard
+├── renovate.json                 # Automated dependency PRs, pinned action digests
+├── SECURITY.md · CONTRIBUTING.md · CHANGELOG.md
 │
 └── images/                       # Documentation screenshots
 ```
@@ -454,7 +494,7 @@ fastAPIWebApp/
 | `POST` | `/login` | No | Authenticate; sets JWT HttpOnly cookie |
 | `GET` | `/signup` | No | Signup form |
 | `POST` | `/signup` | No | Create account (bcrypt-hashed password) |
-| `GET` | `/logout` | No | Clear auth cookies, redirect to `/login` |
+| `GET` | `/logout` | No | Revoke tokens server-side (jti denylist + refresh family), clear cookies |
 | `GET` | `/restore` | Yes | Restore DB form |
 | `POST` | `/restore` | Yes | Restore RDS instance or Aurora cluster from snapshot |
 | `GET` | `/status` | Yes | Status check form |
@@ -469,9 +509,11 @@ fastAPIWebApp/
 | Method | Endpoint | Auth Required | Description |
 |---|---|---|---|
 | `POST` | `/auth/token` | No | OAuth2 password flow — returns access + refresh tokens |
-| `POST` | `/auth/refresh` | No (refresh cookie) | Exchange refresh token for new access token |
+| `POST` | `/auth/refresh` | No (refresh cookie) | **Rotation-on-use:** returns new access + new refresh; replaying a rotated token revokes the whole family (theft detection) |
 | `GET` | `/auth/me` | Yes | Return current user profile |
 | `POST` | `/auth/register` | No | Register new user (API, returns JSON) |
+| `GET` | `/healthz` | No | Liveness / synthetic-monitor probe (no DB dependency) |
+| `GET` | `/metrics` | No | Prometheus metrics (scraped via ServiceMonitor) |
 | `GET` | `/api/docs` | No | Swagger UI |
 | `GET` | `/api/redoc` | No | ReDoc |
 
@@ -494,9 +536,11 @@ fastAPIWebApp/
 | Method | Endpoint | Auth Required | Description |
 |---|---|---|---|
 | `POST` | `/auth/token` | No | OAuth2 password flow |
-| `POST` | `/auth/refresh` | No (refresh cookie) | Refresh access token |
+| `POST` | `/auth/refresh` | No (refresh cookie) | Rotation-on-use refresh (reuse detection revokes the family) |
 | `GET` | `/auth/me` | Yes | Return current admin profile |
 | `POST` | `/auth/register` | No | Register admin user (API, returns JSON) |
+| `GET` | `/healthz` | No | Liveness / synthetic-monitor probe |
+| `GET` | `/metrics` | No | Prometheus metrics |
 | `GET` | `/api/docs` | No | Swagger UI |
 | `GET` | `/api/redoc` | No | ReDoc |
 
@@ -968,15 +1012,36 @@ Every `fastapi1/` and `fastapi-admin/` manifest directory (all 3 clouds) now shi
 
 Every `fastapi1/` and `fastapi-admin/` deployment now ships a `networkpolicy.yaml` (ingress limited to the app port; egress limited to DNS/HTTPS/Postgres — previously zero policies protected these workloads) and the main container runs with `readOnlyRootFilesystem: true` across all three clouds (EKS previously disabled this with a `# uvicorn writes temp files` comment; an `emptyDir` mounted at `/tmp` — also used for the app's log file, see `startup.sh` — makes the read-only root filesystem actually work instead of being switched off).
 
+### Cluster Admission Policies — Kyverno
+
+Manifest-level hardening is now **cluster-enforced** so a future edit (or a manual `kubectl run`) cannot regress it. [`kubernetes/policies/`](kubernetes/policies/) ships four enforced Kyverno ClusterPolicies plus an install script ([ADR-0003](docs/adr/0003-kyverno-admission-control.md)):
+
+| Policy | Enforces |
+|---|---|
+| [`verify-image-signatures.yaml`](kubernetes/policies/verify-image-signatures.yaml) | Only images with a valid **Cosign keyless signature + SPDX SBOM + SLSA provenance** attestation (from this repo's GitHub Actions OIDC identity) are admitted; tags are rewritten to digests at admission |
+| [`require-pod-security.yaml`](kubernetes/policies/require-pod-security.yaml) | PSS `restricted` semantics: non-root, seccomp, all capabilities dropped, no privilege escalation, read-only root FS; PSS labels required on `fastapi-*` namespaces |
+| [`require-networkpolicy.yaml`](kubernetes/policies/require-networkpolicy.yaml) | Auto-generates a default-deny NetworkPolicy in every new namespace |
+| [`disallow-latest-tag.yaml`](kubernetes/policies/disallow-latest-tag.yaml) | Rejects `:latest` / untagged images |
+
+This closes the supply chain end-to-end: **build → sign/attest (CI) → verify (admission)** — the cluster no longer accepts "anything from the registry". Roll out new policies warn-then-block (Audit → Enforce) per [`kubernetes/policies/README.md`](kubernetes/policies/README.md). Service mesh / mTLS was evaluated and deliberately deferred with recorded revisit triggers ([ADR-0004](docs/adr/0004-defer-service-mesh.md)).
+
 ---
 
 ## CI/CD Pipeline
 
-Six workflows live under [`.github/workflows/`](.github/workflows/) — one per (app × cloud) combination plus a standalone Trivy scan. Each pipeline is a 10-stage DevSecOps flow: secret-scan → SAST → SCA → build → container-scan → IaC-scan → sign-and-sbom → deploy → DAST → notify.
+Six workflows live under [`.github/workflows/`](.github/workflows/) (sources maintained in [`actions/`](actions/)) — one per (app × cloud) combination plus a standalone Trivy scan, alongside the reusable-scan, AI-review, AI-triage and synthetic-monitor workflows. Each pipeline is a 10-stage DevSecOps flow: secret-scan → SAST → SCA → build → container-scan → IaC-scan → sign/SBOM/provenance → deploy → DAST (post-deploy **and** on PRs) → notify.
 
 > **Every scan gate now blocks the build.** Bandit/Semgrep/pip-audit/Trivy/Checkov/ZAP
 > used to run with `|| true` / `exit-code: "0"` / `soft_fail: true` / `fail_action: false`
 > — visibility without enforcement. All six now fail the pipeline on High/Critical findings.
+
+Pipeline hardening beyond the gates:
+
+- **Concurrency guard** on every workflow — a new push supersedes an in-flight PR run; deploys to the same ref queue instead of racing (fixes last-write-silently-wins).
+- **SLSA provenance** — stage 7 attests how each image was built (workflow, commit, run) with `cosign attest --type slsaprovenance1`, alongside the signature and SPDX SBOM. All three are verified at admission by Kyverno.
+- **DAST on pull requests** — a `dast-pr` job builds the candidate image, runs it with a Postgres sidecar on the runner, and gates the PR on an OWASP ZAP baseline scan (FAIL-level alerts block merge). Post-deploy ZAP still runs on `main`/`master`.
+- **Reusable scan workflow** — [`reusable-security-scans.yml`](actions/reusable-security-scans.yml) consolidates the previously copy-pasted secret-scan/SAST/SCA/IaC stages behind `workflow_call`, so scanning policy changes are made once, not six times.
+- **AI code review** — [`ai-code-review.yml`](actions/ai-code-review.yml) has Claude review every PR with a security-first checklist (advisory; CODEOWNERS approval remains required).
 
 ### DevSecOps Pipeline — 10-Stage Flow
 
@@ -1009,13 +1074,13 @@ flowchart LR
 
     S5 --> S7
     S6 --> S7
-    S7["7. Sign and SBOM<br/>cosign keyless sign<br/>syft SBOM + attest"]:::build
+    S7["7. Sign · SBOM · Provenance<br/>cosign keyless sign<br/>syft SBOM + SLSA attest"]:::build
 
     S7 --> S8
     S8["8. Deploy<br/>argocd app set --kustomize-image<br/>argocd app sync and wait<br/>ArgoCD is sole applier"]:::deploy
 
     S8 --> S9
-    S9["9. DAST<br/>OWASP ZAP Baseline<br/>main and master only"]:::dast
+    S9["9. DAST<br/>OWASP ZAP Baseline<br/>post-deploy on main<br/>+ dast-pr gates PRs"]:::dast
 
     S8 --> S10
     S9 --> S10
@@ -1208,6 +1273,83 @@ flowchart LR
 | [`devsecops-fastapi-admin-aks.yml`](.github/workflows/devsecops-fastapi-admin-aks.yml) | ADMIN | Azure AKS | Azure ACR |
 | [`trivy-scan.yaml`](.github/workflows/trivy-scan.yaml) | (standalone) | — | — |
 
+Supporting workflows (sources in [`actions/`](actions/), deployed to `.github/workflows/`):
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| [`reusable-security-scans.yml`](actions/reusable-security-scans.yml) | `workflow_call` | Shared secret-scan / SAST / SCA / IaC stages — one implementation for all (app × cloud) pipelines |
+| [`ai-code-review.yml`](actions/ai-code-review.yml) | every PR | Claude security-first code review, inline comments (advisory) |
+| [`ai-security-triage.yml`](actions/ai-security-triage.yml) | nightly + manual | Claude triages open code-scanning alerts → job summary + rolling issue |
+| [`synthetic-monitor.yml`](actions/synthetic-monitor.yml) | every 10 min | Black-box `/healthz` probe of deployed apps → Slack on failure |
+
+---
+
+## Security Hardening — JWT, Sessions & Rate Limiting
+
+The auth layer closes every token-handling finding from the external analysis ([ADR-0002](docs/adr/0002-jwt-rs256-rotation-revocation.md)):
+
+| Control | Before | Now |
+|---|---|---|
+| Signing | HS256, one static `SECRET_KEY` shared by every service | **RS256 keypair** via `JWT_PRIVATE_KEY(_FILE)` / `JWT_PUBLIC_KEY(_FILE)` (e.g. the Secrets Store CSI mount); verifiers hold only the public key; HS256 survives solely as a warned local-dev fallback |
+| Refresh tokens | Valid 7 days, replayable | **Rotation-on-use with families** — each `/auth/refresh` invalidates the presented token and issues a new one; replaying a rotated token is treated as theft and revokes the entire family |
+| Logout / revocation | Client-side cookie delete only | **Server-side `jti` denylist** — logout revokes the access token and refresh family; every `decode_token` checks the denylist |
+| Rate limiting | In-process (200/min × replica count) | **Globally enforced via Redis** (`REDIS_URL`) — 200/min general, 10/min auth endpoints, across all replicas; in-process fallback for dev |
+| Cookies | `secure=False` | Secure + HttpOnly + SameSite by default (`COOKIE_SECURE=0` opt-out for local HTTP) |
+| CORS | Wildcard origin **with** credentials | Env-driven allowlist (`CORS_ALLOW_ORIGINS`); credentials disabled under wildcard |
+
+Shared token state lives in `token_store.py` (both apps, kept in lockstep): Redis-backed when `REDIS_URL` is set, thread-safe in-process otherwise.
+
+---
+
+## Observability & SRE
+
+The Prometheus/Grafana/RabbitMQ operators were already installed; the **practice** that makes them useful is now committed to the repo:
+
+- **SLOs** — [`docs/slo.md`](docs/slo.md): 99.5% availability, p95 < 500 ms, with an explicit error-budget policy (feature freeze on exhaustion).
+- **Alert rules** — [`kubernetes/observability/prometheus-rules.yaml`](kubernetes/observability/prometheus-rules.yaml): multi-window multi-burn-rate availability alerts (14.4× page / 3× ticket), latency, outage, crash-loop, and auth-abuse (429 spike) rules, routed to Slack via a committed `AlertmanagerConfig`.
+- **Dashboard** — [`kubernetes/observability/grafana-dashboard.yaml`](kubernetes/observability/grafana-dashboard.yaml): golden signals + SLO overlays, reconciled by the grafana-operator (dashboard-as-code, not click-ops).
+- **App instrumentation** — `telemetry.py` in both apps: Prometheus `/metrics` (scraped via the committed [`ServiceMonitor`](kubernetes/observability/servicemonitor.yaml)), optional OpenTelemetry tracing (`OTEL_EXPORTER_OTLP_ENDPOINT`), structured JSON logs (`LOG_FORMAT=json`), and a dependency-free `/healthz`.
+- **Synthetic monitoring** — [`actions/synthetic-monitor.yml`](actions/synthetic-monitor.yml) probes the public endpoints every 10 minutes from outside the cluster, catching LB/DNS/cert failures in-cluster probes can't see.
+
+---
+
+## Governance & Compliance
+
+Previously the lowest-scoring domain (2.4/5) — now fully papered:
+
+| Area | Where |
+|---|---|
+| Vulnerability disclosure | [`SECURITY.md`](SECURITY.md) — private advisories, 2-day ack / 7-day triage SLA |
+| Review authority | [`.github/CODEOWNERS`](.github/CODEOWNERS) — per-path owners, security-sensitive paths overlap |
+| Contribution rules | [`CONTRIBUTING.md`](CONTRIBUTING.md) + PR template with a mandatory security-impact statement + issue forms |
+| Architecture decisions | [`docs/adr/`](docs/adr/) — GitOps sole applier, JWT hardening, Kyverno, service-mesh deferral, AI-native DevSecOps |
+| Incident response | [`docs/governance/incident-response.md`](docs/governance/incident-response.md) — severities, roles, security addendum, blameless postmortems |
+| Disaster recovery | [`docs/governance/disaster-recovery.md`](docs/governance/disaster-recovery.md) — **RTO/RPO per component**, three recovery scenarios, drill cadence |
+| Data classification | [`docs/governance/data-classification.md`](docs/governance/data-classification.md) — Secret/PII/internal/public classes, PII inventory & flows |
+| Audit-log retention | [`docs/governance/audit-log-retention.md`](docs/governance/audit-log-retention.md) — per-log retention incl. `user_info` (400 days, then anonymized) |
+| Branching & protection | [`docs/governance/branching-strategy.md`](docs/governance/branching-strategy.md) — trunk-based, required checks per gate |
+| Dependency currency | [`renovate.json`](renovate.json) — grouped update PRs, pinned action digests, prioritized vulnerability alerts |
+| Releases | [`CHANGELOG.md`](CHANGELOG.md) (Keep-a-Changelog + SemVer) |
+
+The finding-by-finding closure map for the whole external analysis lives in [`docs/gap-closure.md`](docs/gap-closure.md).
+
+---
+
+## AI-Native DevSecOps
+
+The modernization layer ([ADR-0005](docs/adr/0005-ai-native-devsecops.md)) — AI drafts, ranks and proposes; **humans merge, deploy and remediate**:
+
+| Capability | Entry point | How it runs |
+|---|---|---|
+| Agentic restore workflow | [`lib/agent_orchestrator.py`](dockerized/USER_FASTAPI/lib/agent_orchestrator.py) | In-app LangGraph ReAct agent (Claude) — `POST /agent/restore-workflow` |
+| SARIF triage agent | [`ai/triage/sarif_triage.py`](ai/triage/sarif_triage.py) | Nightly: pulls open code-scanning alerts, dedupes across tools/apps, ranks by real exploitability, proposes fixes → job summary + rolling issue |
+| AI code review | [`actions/ai-code-review.yml`](actions/ai-code-review.yml) | Claude Code action on every PR — security-first checklist, inline comments |
+| AI runbooks & postmortems | [`ai/runbooks/generate_runbook.py`](ai/runbooks/generate_runbook.py) | CLI — drafts blameless postmortems from incident logs and per-alert runbooks in the house format |
+| MCP server | [`ai/mcp/devsecops_mcp_server.py`](ai/mcp/devsecops_mcp_server.py) + [`.mcp.json`](.mcp.json) | Read-only bridge for Claude Code/Desktop: security posture, alerts, pipeline runs, deployment state, governance docs |
+| Shift-left hooks | [`.pre-commit-config.yaml`](.pre-commit-config.yaml) | GitLeaks + Bandit + private-key detection at the developer keyboard |
+
+Setup and usage examples: [`ai/README.md`](ai/README.md). CI needs the `ANTHROPIC_API_KEY` secret; its absence degrades gracefully (AI jobs fail independently of the security gates).
+
 ---
 
 ## Getting Started
@@ -1255,6 +1397,27 @@ USER_FASTAPI additionally needs these to enable `/agent/restore-workflow` (see [
 ```bash
 ANTHROPIC_API_KEY=<claude-api-key>
 ANTHROPIC_MODEL=claude-sonnet-5  # optional, defaults to claude-sonnet-5
+```
+
+Both FastAPI apps also honor these hardening/observability variables (all optional; safe defaults):
+
+```bash
+# JWT — RS256 in production (falls back to HS256 + SECRET_KEY with a warning)
+JWT_PRIVATE_KEY=<PEM>            # or JWT_PRIVATE_KEY_FILE=/mnt/secrets-store/jwt-private
+JWT_PUBLIC_KEY=<PEM>             # or JWT_PUBLIC_KEY_FILE=/mnt/secrets-store/jwt-public
+
+# Server-side token state + global rate limits (per-pod in-process without it)
+REDIS_URL=redis://redis.fastapi-namespace:6379/0
+
+# Web security
+COOKIE_SECURE=1                  # set 0 only for local HTTP development
+CORS_ALLOW_ORIGINS=https://app.example.com,https://admin.example.com
+
+# Observability
+ENABLE_METRICS=1                 # Prometheus /metrics (set 0 to disable)
+LOG_FORMAT=json                  # structured JSON logs
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # enables tracing when set
+OTEL_SERVICE_NAME=fastapi-user-app
 ```
 
 ### Initialize the Database
